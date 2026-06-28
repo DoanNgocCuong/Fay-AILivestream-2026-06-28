@@ -305,7 +305,13 @@ class ApiEmbeddingService:
 _global_embedding_service = None
 
 def get_embedding_service() -> ApiEmbeddingService:
-    """获取全局embedding服务实例"""
+    """获取全局embedding服务实例。未配置 embedding_api_model 时直接 raise 让调用方用 mock。"""
+    try:
+        import utils.config_util as cfg
+        if cfg.embedding_api_base_url is None:
+            raise ValueError("embedding disabled — using mock vector")
+    except ImportError:
+        pass
     global _global_embedding_service
     if _global_embedding_service is None:
         _global_embedding_service = ApiEmbeddingService()

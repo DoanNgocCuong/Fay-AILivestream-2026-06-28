@@ -61,6 +61,9 @@ def _worker_loop():
         except queue.Empty:
             continue
 
+        # Convert to absolute path — Wav2Lip chạy với cwd khác nên relative path sẽ sai
+        audio_path = os.path.abspath(audio_path)
+
         if not os.path.exists(audio_path):
             util.log(2, f"[LipSync] Audio không tồn tại: {audio_path}")
             continue
