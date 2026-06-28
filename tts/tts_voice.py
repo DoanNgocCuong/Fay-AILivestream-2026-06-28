@@ -79,12 +79,33 @@ class EnumVoice(Enum):
             "cheerful": "cheerful"
         }
     }
-
-
+    # Vietnamese voices (Edge-TTS)
+    HOAI_MY = {
+        "name": "Hoài My (vi-nữ)",
+        "voiceName": "vi-VN-HoaiMyNeural",
+        "styleList": {
+            "angry": "angry",
+            "lyrical": "lyrical",
+            "calm": "gentle",
+            "assistant": "affectionate",
+            "cheerful": "cheerful"
+        }
+    }
+    NAM_MINH = {
+        "name": "Nam Minh (vi-nam)",
+        "voiceName": "vi-VN-NamMinhNeural",
+        "styleList": {
+            "angry": "angry",
+            "lyrical": "lyrical",
+            "calm": "calm",
+            "assistant": "assistant",
+            "cheerful": "cheerful"
+        }
+    }
 
 
 def get_voice_list():
-    return [EnumVoice.XIAO_XIAO_NEW, EnumVoice.YUN_XI, EnumVoice.XIAO_XIAO, EnumVoice.YUN_JIAN, EnumVoice.XIAO_YI, EnumVoice.YUN_YANG, EnumVoice.YUN_XIA]
+    return [EnumVoice.XIAO_XIAO_NEW, EnumVoice.YUN_XI, EnumVoice.XIAO_XIAO, EnumVoice.YUN_JIAN, EnumVoice.XIAO_YI, EnumVoice.YUN_YANG, EnumVoice.YUN_XIA, EnumVoice.HOAI_MY, EnumVoice.NAM_MINH]
 
 
 def get_voice_of(name):

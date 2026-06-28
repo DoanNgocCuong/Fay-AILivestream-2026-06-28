@@ -46,21 +46,21 @@ from flask_httpauth import HTTPBasicAuth
 from core import qa_service
 from core import stream_manager
 
-# 文字接口读取回复流时的空闲超时（秒）：连续这么久读不到任何数据则判定异常并收尾，
-# 避免因结束标记(_<isend>)丢失导致 /v1/chat/completions 永久挂起。
+# Thời gian chờ idle khi đọc stream phản hồi giao diện văn bản (giây): nếu không đọc được dữ liệu trong khoảng thời gian này thì xác định lỗi và kết thúc,
+# tránh trường hợp /v1/chat/completions treo vô hạn do mất dấu hiệu kết thúc (_<isend>).
 _STREAM_READ_IDLE_TIMEOUT = 180
 
-# 全局变量，用于跟踪当前的genagents服务器
+# Biến toàn cục để theo dõi server genagents hiện tại
 genagents_server = None
 genagents_thread = None
 monitor_thread = None
 
 __app = Flask(__name__)
-# 禁用 Flask 默认日志
+# Tắt log mặc định của Flask
 __app.logger.disabled = True
 log = logging.getLogger('werkzeug')
 log.disabled = True
-# 禁用请求日志中间件
+# Tắt middleware log request
 __app.config['PROPAGATE_EXCEPTIONS'] = True
 
 auth = HTTPBasicAuth()
@@ -470,7 +470,7 @@ def api_submit():
 
 @__app.route('/api/get-data', methods=['post'])
 def api_get_data():
-    # 获取配置和语音列表
+    # Lấy cấu hình và danh sách giọng đọc
     try:
         config_util.load_config()
         voice_list = tts_voice.get_voice_list()
@@ -584,7 +584,7 @@ def api_get_data():
 
 @__app.route('/api/start-live', methods=['post'])
 def api_start_live():
-    # 启动
+    # Khởi động
     try:
         fay_booter.start()
         gsleep(1)
@@ -595,7 +595,7 @@ def api_start_live():
 
 @__app.route('/api/stop-live', methods=['post'])
 def api_stop_live():
-    # 停止
+    # Dừng
     try:
         fay_booter.stop()
         gsleep(1)
@@ -606,7 +606,7 @@ def api_stop_live():
 
 @__app.route('/api/send', methods=['post'])
 def api_send():
-    # 接收前端发送的消息
+    # Nhận tin nhắn từ frontend
     data = request.values.get('data')
     if not data:
         return jsonify({'result': 'error', 'message': '未提供数据'})
@@ -627,7 +627,7 @@ def api_send():
     except Exception as e:
         return jsonify({'result': 'error', 'message': f'发送消息时出错: {e}'}), 500
 
-# 获取指定用户的消息记录（支持分页）
+# Lấy lịch sử tin nhắn của người dùng cụ thể (hỗ trợ phân trang)
 @__app.route('/api/get-msg', methods=['post'])
 def api_get_Msg():
     try:
@@ -639,15 +639,15 @@ def api_get_Msg():
         if not isinstance(data, dict):
             data = {}
         username = data.get("username")
-        limit = data.get("limit", 30)  # 默认每页30条
-        offset = data.get("offset", 0)  # 默认从0开始
+        limit = data.get("limit", 30)  # Mặc định 30 bản ghi mỗi trang
+        offset = data.get("offset", 0)  # Mặc định bắt đầu từ 0
         contentdb = content_db.new_instance()
         uid = 0
         if username:
             uid = member_db.new_instance().find_user(username)
             if uid == 0:
                 return json.dumps({'list': [], 'total': 0, 'hasMore': False})
-        # 获取总数用于判断是否还有更多
+        # Lấy tổng số để xác định còn dữ liệu hay không
         total = contentdb.get_message_count(uid)
         list = contentdb.get_list('all', 'desc', limit, uid, offset)
         relist = []
@@ -655,7 +655,7 @@ def api_get_Msg():
         while i >= 0:
             timezone = pytz.timezone('Asia/Shanghai')
             ts = list[i][3]
-            ts_sec = ts / 1000 if ts > 9999999999 else ts  # 兼容旧秒级和新毫秒级时间戳
+            ts_sec = ts / 1000 if ts > 9999999999 else ts  # Tương thích timestamp giây cũ và mili-giây mới
             timetext = datetime.datetime.fromtimestamp(ts_sec, timezone).strftime('%Y-%m-%d %H:%M:%S.') + f"{int(ts % 1000) if ts > 9999999999 else 0:03d}"
             relist.append(dict(type=list[i][0], way=list[i][1], content=list[i][2], createtime=list[i][3], timetext=timetext, username=list[i][5], id=list[i][6], is_adopted=list[i][7]))
             i -= 1
@@ -668,7 +668,7 @@ def api_get_Msg():
     except Exception as e:
         return jsonify({'list': [], 'total': 0, 'hasMore': False, 'message': f'获取消息时出错: {e}'}), 500
 
-# 根据ID获取单条消息
+# Lấy một tin nhắn theo ID
 @__app.route('/api/get-msg-by-id', methods=['post'])
 def api_get_msg_by_id():
     try:
@@ -683,9 +683,9 @@ def api_get_msg_by_id():
     except Exception as e:
         return jsonify({'content': '', 'error': str(e)})
 
-#模型列表接口
+# API danh sách model
 def _extract_context_length(model_obj):
-    """从上游模型对象中提取上下文长度（兼容多种服务实现）"""
+    """Trích xuất độ dài context từ đối tượng model upstream (tương thích nhiều cài đặt service)"""
     for key in ("context_length", "max_model_len", "context_window", "max_context_length"):
         val = model_obj.get(key)
         if val is not None:
@@ -697,7 +697,7 @@ def _extract_context_length(model_obj):
 
 
 def _fetch_upstream_models():
-    """获取上游模型列表，尝试提取 context_length"""
+    """Lấy danh sách model upstream, thử trích xuất context_length"""
     config_util.load_config()
     api_key = config_util.key_gpt_api_key
     models_url = _build_models_url(config_util.gpt_base_url)
@@ -714,7 +714,7 @@ def _fetch_upstream_models():
     if not isinstance(data, list):
         return [], None
 
-    # 找到当前配置的模型，提取其 context_length
+    # Tìm model đang cấu hình, trích xuất context_length
     current_model = getattr(config_util, "gpt_model_engine", None)
     current_ctx = None
     for m in data:
@@ -724,7 +724,7 @@ def _fetch_upstream_models():
         if ctx is not None and m.get("id") == current_model:
             current_ctx = ctx
 
-    # 如果列表里没有 context_length，尝试查询单个模型详情
+    # Nếu danh sách không có context_length, thử truy vấn chi tiết từng model
     if current_ctx is None and current_model:
         try:
             base = models_url.rstrip("/")
@@ -771,11 +771,11 @@ def api_v1_models():
     })
 
 
-#文字沟通接口
+# Giao diện chat văn bản
 @__app.route('/v1/chat/completions', methods=['post'])
 @__app.route('/api/send/v1/chat/completions', methods=['post'])
 def api_send_v1_chat_completions():
-    # 处理聊天完成请求
+    # Xử lý yêu cầu chat completion
     data = request.get_json()
     if not data:
         return jsonify({'error': 'missing request body'})
@@ -793,7 +793,7 @@ def api_send_v1_chat_completions():
                 return jsonify({'error': 'LLM base_url is not configured'}), 500
 
             stream_requested = _as_bool(data.get('stream', False))
-            # model=llm 时自动使用 system.conf 中配置的模型
+            # Khi model=llm thì tự động dùng model cấu hình trong system.conf
             model_name = config_util.gpt_model_engine if model == 'llm' else model
             payload = _prepare_llm_proxy_payload(data, model_name)
             if not payload.get("messages"):
@@ -854,7 +854,7 @@ def api_send_v1_chat_completions():
             last_content = messages
 
         observation = data.get('observation', '')
-        # 检查请求中是否指定了流式传输
+        # Kiểm tra request có yêu cầu stream hay không
         stream_requested = data.get('stream', False)
         no_reply = _as_bool(data.get('no_reply', data.get('noReply', False)))
         obs_text = ""
@@ -922,12 +922,12 @@ def api_send_v1_chat_completions():
             })
         if stream_requested or model == 'fay-streaming':
             interact = Interact("text", 1, {'user': username, 'msg': last_content, 'observation': str(observation), 'stream':True})
-            util.printInfo(1, username, '[文字沟通接口(流式)]{}'.format(interact.data["msg"]), time.time())
+            util.printInfo(1, username, '[Giao diện văn bản (stream)]{}'.format(interact.data["msg"]), time.time())
             fay_booter.feiFei.on_interact(interact)
             return gpt_stream_response(last_content, username)
         else:
             interact = Interact("text", 1, {'user': username, 'msg': last_content, 'observation': str(observation), 'stream':False})
-            util.printInfo(1, username, '[文字沟通接口(非流式)]{}'.format(interact.data["msg"]), time.time())
+            util.printInfo(1, username, '[Giao diện văn bản (non-stream)]{}'.format(interact.data["msg"]), time.time())
             fay_booter.feiFei.on_interact(interact)
             return non_streaming_response(last_content, username)
     except Exception as e:
@@ -935,7 +935,7 @@ def api_send_v1_chat_completions():
 
 @__app.route('/api/get-member-list', methods=['post'])
 def api_get_Member_list():
-    # 获取成员列表
+    # Lấy danh sách thành viên
     try:
         memberdb = member_db.new_instance()
         list = memberdb.get_all_users()
@@ -945,7 +945,7 @@ def api_get_Member_list():
 
 @__app.route('/api/add-user', methods=['POST'])
 def api_add_user():
-    """添加新用户"""
+    """Thêm người dùng mới"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -959,15 +959,15 @@ def api_add_user():
         if username == 'User':
             return jsonify({'success': False, 'message': '不能使用保留的用户名 "User"'}), 400
 
-        # 检查用户是否已存在
+        # Kiểm tra người dùng đã tồn tại chưa
         memberdb = member_db.new_instance()
         if memberdb.is_username_exist(username) != "notexists":
             return jsonify({'success': False, 'message': '该用户名已存在'}), 400
 
-        # 添加用户
+        # Thêm người dùng
         result = memberdb.add_user(username)
         if result == "success":
-            # 获取新用户的 uid
+            # Lấy uid của người dùng mới
             uid = memberdb.find_user(username)
             return jsonify({
                 'success': True,
@@ -982,7 +982,7 @@ def api_add_user():
 
 @__app.route('/api/get-run-status', methods=['post'])
 def api_get_run_status():
-    # 获取运行状态
+    # Lấy trạng thái chạy
     try:
         status = fay_booter.is_running()
         return json.dumps({'status': status})
@@ -991,7 +991,7 @@ def api_get_run_status():
 
 @__app.route('/api/delete-user', methods=['POST'])
 def api_delete_user():
-    """删除用户及其所有数据（聊天记录、记忆文件）"""
+    """Xóa người dùng và toàn bộ dữ liệu (lịch sử trò chuyện, file bộ nhớ)"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -999,7 +999,7 @@ def api_delete_user():
 
         username = data['username']
 
-        # 不允许删除主人账户
+        # Không cho phép xóa tài khoản chủ
         if username == 'User':
             return jsonify({'success': False, 'message': '无法删除主人账户'}), 400
 
@@ -1007,13 +1007,13 @@ def api_delete_user():
         deleted_memory = False
         deleted_user = False
 
-        # 1. 删除聊天记录（fay.db 中的 T_Msg 和 T_Adopted）
+        # 1. Xóa lịch sử trò chuyện (T_Msg và T_Adopted trong fay.db)
         try:
             deleted_msgs = content_db.new_instance().delete_messages_by_username(username)
         except Exception as e:
-            print(f"删除聊天记录时出错: {e}")
+            print(f"Lỗi khi xóa lịch sử trò chuyện: {e}")
 
-        # 2. 删除用户记忆文件目录（如果启用了按用户隔离）
+        # 2. Xóa thư mục bộ nhớ người dùng (nếu bật cách ly theo người dùng)
         try:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             mem_base = os.path.join(base_dir, "memory")
@@ -1023,23 +1023,23 @@ def api_delete_user():
                 import shutil
                 shutil.rmtree(user_memory_dir)
                 deleted_memory = True
-                print(f"已删除用户记忆目录: {user_memory_dir}")
+                print(f"Đã xóa thư mục bộ nhớ người dùng: {user_memory_dir}")
 
-            # 清除缓存的 agent 对象
+            # Xóa đối tượng agent đã cache
             try:
                 if hasattr(nlp_cognitive_stream, 'agents') and username in nlp_cognitive_stream.agents:
                     del nlp_cognitive_stream.agents[username]
             except Exception:
                 pass
         except Exception as e:
-            print(f"删除记忆文件时出错: {e}")
+            print(f"Lỗi khi xóa file bộ nhớ: {e}")
 
-        # 3. 从用户表删除用户
+        # 3. Xóa người dùng khỏi bảng người dùng
         try:
             member_db.new_instance().delete_user(username)
             deleted_user = True
         except Exception as e:
-            print(f"删除用户记录时出错: {e}")
+            print(f"Lỗi khi xóa bản ghi người dùng: {e}")
 
         return jsonify({
             'success': True,
@@ -1056,7 +1056,7 @@ def api_delete_user():
 
 @__app.route('/api/get-user-extra-info', methods=['POST'])
 def api_get_user_extra_info():
-    """获取用户补充信息"""
+    """Lấy thông tin bổ sung của người dùng"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -1070,7 +1070,7 @@ def api_get_user_extra_info():
 
 @__app.route('/api/update-user-extra-info', methods=['POST'])
 def api_update_user_extra_info():
-    """更新用户补充信息"""
+    """Cập nhật thông tin bổ sung của người dùng"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -1085,7 +1085,7 @@ def api_update_user_extra_info():
 
 @__app.route('/api/get-user-portrait', methods=['POST'])
 def api_get_user_portrait():
-    """获取用户画像"""
+    """Lấy hồ sơ người dùng"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -1099,7 +1099,7 @@ def api_get_user_portrait():
 
 @__app.route('/api/update-user-portrait', methods=['POST'])
 def api_update_user_portrait():
-    """更新用户画像"""
+    """Cập nhật hồ sơ người dùng"""
     try:
         data = request.get_json()
         if not data or 'username' not in data:
@@ -1114,13 +1114,13 @@ def api_update_user_portrait():
 
 @__app.route('/api/get-system-status', methods=['get'])
 def api_get_system_status():
-    # 获���系统各组件连接状态
+    # Lấy trạng thái kết nối các thành phần hệ thống
     try:
         username = request.args.get('username')
         server_status = True
         
-        # 数字人状态 (HumanServer 10002)
-        # 检查指定用户是否连接了数字人端
+        # Trạng thái nhân vật số (HumanServer 10002)
+        # Kiểm tra người dùng chỉ định có kết nối nhân vật số không
         digital_human_status = False
         try:
             wsa_instance = wsa_server.get_instance()
@@ -1129,8 +1129,8 @@ def api_get_system_status():
         except Exception:
             digital_human_status = False
         
-        # 远程音频状态 (Socket 10001)
-        # 检查指定用户是否连接了远程音频
+        # Trạng thái âm thanh từ xa (Socket 10001)
+        # Kiểm tra người dùng chỉ định có kết nối âm thanh từ xa không
         remote_audio_status = False
         try:
             if username and hasattr(fay_booter, 'DeviceInputListenerDict'):
@@ -1151,7 +1151,7 @@ def api_get_system_status():
 
 @__app.route('/api/get-audio-config', methods=['GET'])
 def api_get_audio_config():
-    """获取麦克风和扬声器的配置状态"""
+    """Lấy trạng thái cấu hình microphone và loa"""
     try:
         mic_enabled = config_util.config.get('source', {}).get('record', {}).get('enabled', False)
         speaker_enabled = config_util.config.get('interact', {}).get('playSound', False)
@@ -1165,7 +1165,7 @@ def api_get_audio_config():
 
 @__app.route('/api/adopt-msg', methods=['POST'])
 def adopt_msg():
-    # 采纳消息
+    # Chấp nhận tin nhắn
     data = request.get_json()
     if not data:
         return jsonify({'status':'error', 'msg': '未提供数据'})
@@ -1182,7 +1182,7 @@ def adopt_msg():
         info = content_db.new_instance().get_content_by_id(id)
         content = info[3] if info else ''
         if info is not None:
-            # 过滤掉 think 标签及其内容
+            # Lọc bỏ thẻ think và nội dung bên trong
             content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
             previous_info = content_db.new_instance().get_previous_user_message(id)
             previous_content = previous_info[3] if previous_info else ''
@@ -1199,7 +1199,7 @@ def adopt_msg():
 
 @__app.route('/api/unadopt-msg', methods=['POST'])
 def unadopt_msg():
-    # 取消采纳消息
+    # Hủy chấp nhận tin nhắn
     data = request.get_json()
     if not data:
         return jsonify({'status':'error', 'msg': '未提供数据'})
@@ -1215,14 +1215,14 @@ def unadopt_msg():
             return jsonify({'status':'error', 'msg': '消息未找到'}), 404
 
         content = info[3]
-        # 过滤掉 think 标签及其内容，用于匹配 QA 文件中的答案
+        # Lọc bỏ thẻ think và nội dung bên trong, dùng để khớp câu trả lời trong file QA
         clean_content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
 
-        # 从数据库中删除采纳记录，并获取所有相同内容的消息ID
+        # Xóa bản ghi chấp nhận trong DB và lấy tất cả ID tin nhắn cùng nội dung
         success, same_content_ids = content_db.new_instance().unadopt_message(id, clean_content)
 
         if success:
-            # 从 QA 文件中删除对应记录
+            # Xóa bản ghi tương ứng trong file QA
             qa_service.QAService().remove_qapair(clean_content)
             return jsonify({
                 'status': 'success',
@@ -1239,26 +1239,26 @@ def gpt_stream_response(last_content, username):
     _, nlp_Stream = sm.get_Stream(username)
     def generate():
         conversation_id = sm.get_conversation_id(username)
-        # 兜底退出条件：避免因结束标记(_<isend>)丢失而无限挂起
-        idle_timeout = _STREAM_READ_IDLE_TIMEOUT   # 无任何数据可读的最大空闲秒数
+        # Điều kiện thoát dự phòng: tránh treo vô hạn do mất dấu kết thúc (_<isend>)
+        idle_timeout = _STREAM_READ_IDLE_TIMEOUT   # Số giây idle tối đa khi không có dữ liệu
         last_activity = time.time()
         ended = False
         while True:
             sentence = nlp_Stream.read()
             if sentence is None:
-                # 会话已被新的请求顶替：本轮已失效，立即收尾，避免无限丢弃新会话内容
+                # Phiên đã bị thay bởi request mới: phiên này hết hạn, kết thúc ngay
                 if sm.get_conversation_id(username) != conversation_id:
                     break
-                # 长时间无任何输出：判定为异常（结束标记丢失/生产侧异常），收尾退出
+                # Không có output quá lâu: xác định lỗi (mất dấu kết thúc/lỗi phía producer), thoát
                 if time.time() - last_activity > idle_timeout:
-                    util.printInfo(1, username, '[文字沟通接口(流式)] 等待回复超时，提前结束', time.time())
+                    util.printInfo(1, username, '[Giao diện văn bản (stream)] Chờ phản hồi quá hạn, kết thúc sớm', time.time())
                     break
                 gsleep(0.01)
                 continue
 
             last_activity = time.time()
 
-            # 跳过非当前会话
+            # Bỏ qua phiên không phải hiện tại
             try:
                 m = re.search(r"__<cid=([^>]+)>__", sentence)
                 producer_cid = m.group(1)
@@ -1271,9 +1271,9 @@ def gpt_stream_response(last_content, username):
             is_first = "_<isfirst>" in sentence
             is_end = "_<isend>" in sentence
             content = sentence.replace("_<isfirst>", "").replace("_<isend>", "").replace("_<isqa>", "")
-            # 移除 prestart 标签及其内容，不返回给API调用方
+            # Xóa thẻ prestart và nội dung, không trả về cho API caller
             content = re.sub(r'<prestart>[\s\S]*?</prestart>', '', content, flags=re.IGNORECASE)
-            if content or is_first or is_end:  # 只有当有实际内容时才发送
+            if content or is_first or is_end:  # Chỉ gửi khi có nội dung thực sự
                 message = {
                     "id": "faystreaming-" + str(uuid.uuid4()),
                     "object": "chat.completion.chunk",
@@ -1288,7 +1288,7 @@ def gpt_stream_response(last_content, username):
                             "finish_reason": "stop" if is_end else None
                         }
                     ],
-                    #TODO 这里的token计算方式需要优化
+                    #TODO Cần tối ưu cách tính token ở đây
                     "usage": {
                         "prompt_tokens": len(last_content) if is_first else 0,
                         "completion_tokens": len(content),
@@ -1301,7 +1301,7 @@ def gpt_stream_response(last_content, username):
                 ended = True
                 break
             gsleep(0.01)
-        # 非正常结束（超时/会话切换）时补发一个结束块，保证客户端不会一直等待
+        # Kết thúc bất thường (timeout/đổi phiên): gửi thêm block kết thúc để client không chờ mãi
         if not ended:
             message = {
                 "id": "faystreaming-" + str(uuid.uuid4()),
@@ -1322,7 +1322,7 @@ def gpt_stream_response(last_content, username):
 
     return Response(generate(), mimetype='text/event-stream')
 
-# 处理非流式响应
+# Xử lý phản hồi non-stream
 @__app.route('/v1/embeddings', methods=['post'])
 @__app.route('/api/send/v1/embeddings', methods=['post'])
 def api_send_v1_embeddings():
@@ -1370,25 +1370,25 @@ def non_streaming_response(last_content, username):
     _, nlp_Stream = sm.get_Stream(username)
     text = ""
     conversation_id = sm.get_conversation_id(username)
-    # 兜底退出条件：避免因结束标记(_<isend>)丢失而无限挂起
+    # Điều kiện thoát dự phòng: tránh treo vô hạn do mất dấu kết thúc (_<isend>)
     idle_timeout = _STREAM_READ_IDLE_TIMEOUT
     last_activity = time.time()
     while True:
         sentence = nlp_Stream.read()
         if sentence is None:
-            # 会话已被新的请求顶替：本轮已失效，返回已累计内容
+            # Phiên đã bị thay bởi request mới: phiên này hết hạn, trả về nội dung đã tích lũy
             if sm.get_conversation_id(username) != conversation_id:
                 break
-            # 长时间无任何输出：判定为异常，返回已累计内容，避免无限等待
+            # Không có output quá lâu: xác định lỗi, trả về nội dung đã tạo, tránh chờ vô hạn
             if time.time() - last_activity > idle_timeout:
-                util.printInfo(1, username, '[文字沟通接口(非流式)] 等待回复超时，返回已生成内容', time.time())
+                util.printInfo(1, username, '[Giao diện văn bản (non-stream)] Chờ phản hồi quá hạn, trả về nội dung đã tạo', time.time())
                 break
             gsleep(0.01)
             continue
 
         last_activity = time.time()
 
-        # 跳过非当前会话
+        # Bỏ qua phiên không phải hiện tại
         try:
             m = re.search(r"__<cid=([^>]+)>__", sentence)
             producer_cid = m.group(1)
@@ -1403,7 +1403,7 @@ def non_streaming_response(last_content, username):
         text += sentence.replace("_<isfirst>", "").replace("_<isend>", "").replace("_<isqa>", "")
         if is_end:
             break
-    # 移除 prestart 标签及其内容，不返回给API调用方
+    # Xóa thẻ prestart và nội dung, không trả về cho API caller
     text = re.sub(r'<prestart>[\s\S]*?</prestart>', '', text, flags=re.IGNORECASE)
     return jsonify({
         "id": "fay-" + str(uuid.uuid4()),
@@ -1421,7 +1421,7 @@ def non_streaming_response(last_content, username):
                 "finish_reason": "stop"
             }
         ],
-        #TODO 这里的token计算方式需要优化
+        #TODO Cần tối ưu cách tính token ở đây
         "usage": {
             "prompt_tokens": len(last_content),
             "completion_tokens": len(text),
@@ -1461,7 +1461,7 @@ def Page3():
         return f"Error loading settings page: {e}", 500
 
 
-# 输出的音频http
+# HTTP phục vụ file âm thanh output
 @__app.route('/audio/<filename>')
 def serve_audio(filename):
     audio_file = os.path.join(os.getcwd(), "samples", filename)
@@ -1470,7 +1470,7 @@ def serve_audio(filename):
     else:
         return jsonify({'error': '文件未找到'}), 404
 
-# 输出的表情gif
+# HTTP phục vụ file gif biểu cảm output
 @__app.route('/robot/<filename>')
 def serve_gif(filename):
     gif_file = os.path.join(os.getcwd(), "gui", "robot", filename)
@@ -1479,13 +1479,13 @@ def serve_gif(filename):
     else:
         return jsonify({'error': '文件未找到'}), 404
 
-#打招呼
+# Chào hỏi
 @__app.route('/to-greet', methods=['POST'])
 def to_greet():
     data = request.get_json()
     username = data.get('username', 'User')
     observation = data.get('observation', '')
-    interact = Interact("hello", 1, {'user': username, 'msg': '按观测要求打个招呼', 'observation': str(observation)})
+    interact = Interact("hello", 1, {'user': username, 'msg': 'Chào theo yêu cầu quan sát', 'observation': str(observation)})
     text = fay_booter.feiFei.on_interact(interact)
     return jsonify({'status': 'success', 'data': text, 'msg': '已进行打招呼'}), 200 
 

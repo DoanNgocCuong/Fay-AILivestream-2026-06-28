@@ -1,0 +1,61 @@
+
+[key]
+# ============================================================
+# PHASE 1 — AI LIVESTREAM DEMO CONFIG (Vietnamese Sales Host)
+# ============================================================
+
+# ASR: dùng funasr (local) hoặc tắt ASR vì Phase 1 nhập comment tay
+ASR_mode = funasr
+local_asr_ip=127.0.0.1
+local_asr_port=10197
+
+# Ali ASR (để trống nếu không dùng)
+ali_nls_key_id=
+ali_nls_key_secret=
+ali_nls_app_key=
+
+# ============================================================
+# TTS: dùng edge (miễn phí, không cần API key)
+# Sau khi chạy, vào UI chọn giọng "Hoài My (vi-nữ)"
+# ============================================================
+tts_module=edge
+
+# Azure TTS (để trống)
+ms_tts_key=
+ms_tts_region=
+
+# Ali TTS (để trống)
+ali_tss_key_id=
+ali_tss_key_secret=
+ali_tss_app_key=
+
+# Volcano TTS (để trống)
+volcano_tts_appid=
+volcano_tts_access_token=
+volcano_tts_cluster=volcano_tts
+volcano_tts_voice_type=
+
+# ============================================================
+# LLM: Google Gemini API (OpenAI-compatible endpoint)
+# ============================================================
+gpt_api_key=YOUR_GEMINI_API_KEY_HERE
+gpt_base_url=https://generativelanguage.googleapis.com/v1beta/openai/
+gpt_model_engine=gemini-2.5-flash
+
+# Big model (để trống, dùng chung deepseek-chat)
+big_model_engine=
+big_model_base_url=
+big_model_api_key=
+
+# Embedding: tắt (dùng mock vector, đủ cho Phase 1)
+embedding_api_model=
+embedding_base_url=
+
+# Proxy (để trống)
+proxy_config=
+
+# ============================================================
+# Chạy web mode (truy cập http://127.0.0.1:5000)
+# ============================================================
+start_mode=web
+fay_url=http://127.0.0.1:5000

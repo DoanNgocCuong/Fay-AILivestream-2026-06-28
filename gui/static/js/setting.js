@@ -169,10 +169,10 @@ new Vue({
             wake_word_type: 'common',
             wake_word_type_options: [{
                 value: 'common',
-                label: '普通'
+                label: 'Thông thường'
             }, {
                 value: 'front',
-                label: '前置词'
+                label: 'Từ đứng trước'
             }],
             automatic_player_status: false,
             automatic_player_url: "",
@@ -247,8 +247,8 @@ new Vue({
                 this.attribute_additional = config.attribute.additional; 
                 this.attribute_contact = config.attribute.contact;
                 this.attribute_voice = config.attribute.voice;
-                this.attribute_position = config.attribute.position || "客服"; 
-                this.attribute_goal = config.attribute.goal || "解决问题"; 
+                this.attribute_position = config.attribute.position || "销售";
+                this.attribute_goal = config.attribute.goal || "促成交易";
             }
             if (config.interact.perception) {
                 this.interact_perception_follow = config.interact.perception.follow;
@@ -324,36 +324,35 @@ new Vue({
                     }
                 }
             }
-            this.sendSuccessMsg("配置已保存！");
+            this.sendSuccessMsg("Đã lưu cấu hình!");
         },
         startLive() {
             this.liveState = 2
             this.fayService.startLive().then(() => {
                 this.configEditable = false;
-                this.sendSuccessMsg('已开启！');
+                this.sendSuccessMsg('Đã bật!');
             });
         },
         stopLive() {
             this.liveState = 3
             this.fayService.stopLive().then(() => {
                 this.configEditable = true;
-                this.sendSuccessMsg('已关闭！');
+                this.sendSuccessMsg('Đã tắt!');
             });
         },
         sendSuccessMsg(message) {
             this.$notify({
-                title: '成功',
+                title: 'Thành công',
                 message,
                 type: 'success',
             });
         },
         clearMemory() {
-            this.$confirm('清除记忆操作将删除Fay的所有对话记忆，清除后需要重启应用才能生效，确认继续吗?', '提示', {
-                confirmButtonText: '确定',
-                cancelButtonText: '取消',
+            this.$confirm('Thao tác này sẽ xoá toàn bộ bộ nhớ hội thoại của Fay. Cần khởi động lại ứng dụng để áp dụng. Bạn có chắc chắn muốn tiếp tục?', 'Xác nhận', {
+                confirmButtonText: 'Đồng ý',
+                cancelButtonText: 'Huỷ',
                 type: 'warning'
             }).then(() => {
-                // 发送清除记忆请求
                 fetch(`${this.host_url}/api/clear-memory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
@@ -361,53 +360,48 @@ new Vue({
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        this.sendSuccessMsg(data.message || "记忆已清除，请重启应用使更改生效");
+                        this.sendSuccessMsg(data.message || "Đã xoá bộ nhớ, vui lòng khởi động lại ứng dụng");
                     } else {
                         this.$notify({
-                            title: '错误',
-                            message: data.message || '清除记忆失败',
+                            title: 'Lỗi',
+                            message: data.message || 'Xoá bộ nhớ thất bại',
                             type: 'error'
                         });
                     }
                 })
                 .catch(error => {
                     this.$notify({
-                        title: '错误',
-                        message: '清除记忆请求失败',
+                        title: 'Lỗi',
+                        message: 'Yêu cầu xoá bộ nhớ thất bại',
                         type: 'error'
                     });
                 });
-            }).catch(() => {
-                // 用户取消操作
-            });
+            }).catch(() => {});
         },
         clonePersonality() {
-            // 检查是否启用了仿生记忆
             if (this.use_bionic_memory) {
                 this.$notify({
-                    title: '提示',
-                    message: '仿生记忆模式下不支持人格克隆功能，请在设置中关闭仿生记忆后重试',
+                    title: 'Thông báo',
+                    message: 'Chế độ bộ nhớ sinh học không hỗ trợ sao chép tính cách. Vui lòng tắt chế độ này trước.',
                     type: 'warning'
                 });
                 return;
             }
 
             if (this.liveState === 1) {
-                this.$prompt('请输入克隆要求', '克隆人格', {
-                    confirmButtonText: '确定',
-                    cancelButtonText: '取消',
-                    inputPlaceholder: '请输入克隆要求，例如：你现在是一个活泼开朗的助手...'
+                this.$prompt('Nhập yêu cầu sao chép', 'Sao chép tính cách', {
+                    confirmButtonText: 'Đồng ý',
+                    cancelButtonText: 'Huỷ',
+                    inputPlaceholder: 'Ví dụ: Bạn là một trợ lý bán hàng nhiệt tình và thân thiện...'
                 }).then(({ value }) => {
                     if (!value) {
                         this.$notify({
-                            title: '提示',
-                            message: '克隆要求不能为空',
+                            title: 'Thông báo',
+                            message: 'Yêu cầu sao chép không được để trống',
                             type: 'warning'
                         });
                         return;
                     }
-                    
-                    // 直接启动genagents_flask.py并打开decision_interview.html页面
                     fetch(`${this.host_url}/api/start-genagents`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -416,31 +410,30 @@ new Vue({
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            // 弹出提示，显示克隆地址，不自动打开
-                            this.$alert(`决策分析页面已启动，请复制以下链接在新窗口中打开：<br><br><code style="background-color: #f5f5f5; padding: 5px; border-radius: 3px;">${data.url}</code>`, '克隆人格', {
-                                confirmButtonText: '确定',
+                            this.$alert(`Trang phân tích đã khởi động. Vui lòng copy link sau và mở trong cửa sổ mới:<br><br><code style="background-color: #f5f5f5; padding: 5px; border-radius: 3px;">${data.url}</code>`, 'Sao chép tính cách', {
+                                confirmButtonText: 'OK',
                                 dangerouslyUseHTMLString: true
                             });
                         } else {
                             this.$notify({
-                                title: '错误',
-                                message: data.message || '启动决策分析页面失败',
+                                title: 'Lỗi',
+                                message: data.message || 'Khởi động trang phân tích thất bại',
                                 type: 'error'
                             });
                         }
                     })
                     .catch(error => {
                         this.$notify({
-                            title: '错误',
-                            message: '启动决策分析页面请求失败',
+                            title: 'Lỗi',
+                            message: 'Yêu cầu khởi động trang phân tích thất bại',
                             type: 'error'
                         });
                     });
                 });
             } else {
                 this.$notify({
-                    title: '提示',
-                    message: '请先开Fay后再执行此操作',
+                    title: 'Thông báo',
+                    message: 'Vui lòng bật Fay trước khi thực hiện thao tác này',
                     type: 'warning'
                 });
             }
@@ -499,19 +492,16 @@ new Vue({
         // 仿生记忆开关变化事件处理
         onBionicMemoryChange(value) {
             if (value) {
-                this.$confirm('开启仿生记忆后将使用不同的记忆系统，人格克隆功能和认知隔离功能将不可用。确认开启吗?', '提示', {
-                    confirmButtonText: '确定',
-                    cancelButtonText: '取消',
+                this.$confirm('Bật bộ nhớ sinh học sẽ sử dụng hệ thống bộ nhớ khác. Chức năng sao chép tính cách và tách biệt nhận thức sẽ không khả dụng. Bạn có chắc chắn muốn bật?', 'Xác nhận', {
+                    confirmButtonText: 'Đồng ý',
+                    cancelButtonText: 'Huỷ',
                     type: 'warning'
                 }).then(() => {
-                    // 用户确认，保存配置
                     this.saveConfig();
                 }).catch(() => {
-                    // 用户取消，恢复开关状态
                     this.use_bionic_memory = false;
                 });
             } else {
-                // 关闭仿生记忆，直接保存配置
                 this.saveConfig();
             }
         },

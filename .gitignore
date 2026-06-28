@@ -103,6 +103,10 @@ celerybeat.pid
 
 # Environments
 .env
+
+# Secrets / API keys — không commit
+system.conf
+verifier.json
 .venv
 env/
 venv/
