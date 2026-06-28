@@ -156,6 +156,10 @@ class VideoDisplay:
                 with self._lock:
                     self._mode = _MODE_IDLE
                     self._speak_video_path = None
+                # Reset idle video to frame 0 so audio-clock sync doesn't stall
+                # (idle_cap was at an arbitrary frame when SPEAKING started)
+                if self._idle_cap:
+                    self._idle_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             else:
                 self._show_idle_frame()
 
@@ -241,13 +245,15 @@ class VideoDisplay:
 
         wav = _extract_audio_wav(video_path)
         _play_audio(wav)
+        # Only use audio sync when we successfully started audio playback
+        use_audio_sync = _pygame_available and wav is not None
 
         while self._running:
-            # Audio-clock-driven sync: seek video to match audio position
-            if _pygame_available:
+            if use_audio_sync:
+                # Audio-clock-driven sync: seek video to match audio position
                 audio_pos_ms = pygame.mixer.music.get_pos()
                 if audio_pos_ms < 0:
-                    break  # audio finished
+                    break  # audio finished → video done
                 target_frame = int((audio_pos_ms / 1000.0) * fps)
                 current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                 gap = target_frame - current_frame
@@ -259,13 +265,16 @@ class VideoDisplay:
 
             ret, frame = cap.read()
             if not ret:
-                break
+                break  # video finished (time-based path, or audio-sync fallback)
             frame = self._resize(frame)
             cv2.imshow(config.WINDOW_NAME, frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self._running = False
                 break
-            time.sleep(frame_duration / 2)  # short sleep, not full frame — sync handles timing
+            if use_audio_sync:
+                time.sleep(frame_duration / 2)
+            else:
+                time.sleep(frame_duration)  # time-based playback when no audio
 
         cap.release()
         _stop_audio()
