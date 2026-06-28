@@ -54,6 +54,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Success #3] — 2026-06-28 18h35 — Wav2Lip lip sync chính xác + blend mượt vào luồng video chính
 
+### Tóm tắt (nguyên văn)
+
+> **Đánh dấu success 3 thành công gồm có:**
+>
+> **Success 1:** Khi khách chat thì AI phản hồi lại bằng Audio tích tắc (chưa đến 1s)
+>
+> **Success 2:**
+> - Phát video avatar liên tục có tiếng (loop, không ngắt)
+> - Khi khách comment → AI reply bằng Audio (Edge-TTS giọng Hoài My) + Gen nhép môi (Wav2Lip)
+> - Video dừng lại để nhường chỗ cho audio AI phát
+> - Audio AI phát xong → video tự chạy tiếp
+> - Wav2Lip xử lý async nền (~3-15s), không block pipeline
+>
+> **Success 3:**
+> - Nhép môi chuẩn đúng câu chữ trên đoạn AUDIO OUTPUT + ghép cực mượt vào trong luồng video đang phát =)) ngon vãi (blend mượt vào luồng video chính) - Hiện đang đợi audio (<1s) => nhép môi (10-20s) xong mới phát chèn vào audio
+>
+> **Next steps:**
+> Căn cho AI check xem sẽ ngưng video ở đâu để ghép vào đoạn hợp lý thay vì là đợi nhép môi xong thì ghép luôn.
+
 ### Mục tiêu đạt được
 
 - **Nhép môi chuẩn đúng câu chữ trên đoạn AUDIO OUTPUT** — Wav2Lip sinh ra đúng khẩu hình tiếng Việt khớp với từng âm tiết AI nói
