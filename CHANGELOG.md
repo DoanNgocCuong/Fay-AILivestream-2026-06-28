@@ -52,7 +52,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [Success #3] — 2026-06-28 — Wav2Lip lip sync chính xác + blend mượt vào luồng video chính
+## [Success #3] — 2026-06-28 18h35 — Wav2Lip lip sync chính xác + blend mượt vào luồng video chính
 
 ### Mục tiêu đạt được
 
@@ -166,7 +166,7 @@ except Exception:
 
 ---
 
-## [Success #2] — 2026-06-28 — Video loop + Audio A/V sync + Auto-fit window
+## [Success #2] — 2026-06-28 16h00 — Video loop + Audio A/V sync + Auto-fit window
 
 ### Mục tiêu đạt được
 - Video avatar phát vòng lặp liên tục (IDLE mode)
@@ -239,7 +239,7 @@ except Exception:
 
 ---
 
-## [Success #1] — 2026-06-28 — commit `4abd566`
+## [Success #1] — 2026-06-28 15h00 — commit `4abd566`
 
 ### Mục tiêu đạt được
 Khách chat → AI reply bằng **audio tiếng Việt** + **icon mấp máy miệng** góc trái màn hình.
