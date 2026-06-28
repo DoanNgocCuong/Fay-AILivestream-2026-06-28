@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Session Report] — 2026-06-28 — 14h00–17h00 (3 tiếng siêu tập trung, không nghỉ)
+
+> **Ghi chú cá nhân:** Pin cạn kiệt sau 3h làm việc liên tục không ngừng nghỉ.
+> Héo mẹ luôn sau session này. Lẽ ra nên theo nhịp: **làm – nghỉ – làm – nghỉ**
+> thì năng lượng giữ được lâu hơn thay vì đổ hết 1 lần rồi tắt ngóm.
+
+---
+
+### Trạng thái dự án — AI Avatar Livestream Dr.Bee
+
+**1. ✅ ĐÃ TRIỂN KHAI XONG trong 3h:**
+
+- Phát video avatar liên tục có tiếng (loop, không ngắt)
+- Khi khách comment → AI reply bằng Audio (Edge-TTS giọng Hoài My) + Gen nhép môi (Wav2Lip)
+- Video dừng lại để nhường chỗ cho audio AI phát
+- Audio AI phát xong → video tự chạy tiếp
+- Wav2Lip xử lý async nền (~3-15s), không block pipeline
+
+**2. 🔄 ĐANG LÀM:**
+
+- Ghép nhép môi khít vào phần video đang phát (thay vì phát video nhép môi riêng rẽ, cần blend mượt vào luồng video chính)
+
+**3. ⬜ NEXT STEPS:**
+
+- Logic đồng bộ: audio + nhép môi phải khớp chính xác với video đang phát (frame-level sync)
+- Logic AI quyết định chèn (audio + nhép môi) vào **đúng điểm** trong video — tránh cắt giữa câu/chuyển động
+- Đẩy lên Facebook Livestream (RTMP qua OBS)
+- Test end-to-end thực tế trên stream
+
+**Tiến độ tổng:**
+
+| Hạng mục | Status |
+|---------|--------|
+| Video loop liên tục có tiếng | ✅ |
+| AI reply bằng audio khi có comment | ✅ |
+| Gen nhép môi Wav2Lip (async) | ✅ |
+| Video pause/resume quanh audio AI | ✅ |
+| Wav2Lip code hook vào TTS pipeline | ✅ |
+| Ghép nhép môi khít vào video đang chạy | 🔄 |
+| Sync frame-level audio + lipsync vào video | ⬜ |
+| Logic chọn điểm chèn trong video | ⬜ |
+| Đẩy lên Facebook Livestream | ⬜ |
+| Test end-to-end thực tế | ⬜ |
+
+**→ 5/10 tasks = 50% hoàn thành** (task đang làm tính ~50% → thực tế khoảng **55%**)
+
+---
+
 ## [Success #2] — 2026-06-28 — Video loop + Audio A/V sync + Auto-fit window
 
 ### Mục tiêu đạt được
