@@ -1602,6 +1602,7 @@ class FeiFei:
                     filtered_text = self.__normalize_tts_text(filtered_text)
 
 
+                    _lipsync_handles_audio = False  # khởi tạo trước khi vào block
                     if filtered_text is not None and filtered_text.strip() != "":
 
 
@@ -1623,10 +1624,12 @@ class FeiFei:
                             self.__set_tts_cache(cache_key, result)
 
                         # Trigger lip sync avatar sau khi TTS tạo xong audio
+                        # Nếu Wav2Lip khả dụng, nó sẽ handle audio — skip Fay audio pipeline
+                        _lipsync_handles_audio = False
                         try:
                             from avatar import pipeline as avatar_pipeline
                             if result:
-                                avatar_pipeline.on_audio_ready(result)
+                                _lipsync_handles_audio = avatar_pipeline.on_audio_ready(result)
                         except Exception:
                             pass
 
@@ -1705,7 +1708,10 @@ class FeiFei:
                     time.sleep(1)
 
 
-                MyThread(target=self.__process_output_audio, args=[result, interact, text]).start()
+                # Khi Wav2Lip handle audio, bỏ qua pipeline audio bình thường
+                # để tránh phát âm thanh 2 lần (TTS ngay + lipsync video sau)
+                if not _lipsync_handles_audio:
+                    MyThread(target=self.__process_output_audio, args=[result, interact, text]).start()
 
 
                 return result         

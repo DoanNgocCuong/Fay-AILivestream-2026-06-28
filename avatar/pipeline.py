@@ -28,11 +28,24 @@ def start():
     util.log(1, "[Avatar] Video display đã sẵn sàng")
 
 
-def on_audio_ready(audio_path: str):
-    """Gọi từ fay_core sau khi TTS tạo xong file audio."""
+def on_audio_ready(audio_path: str) -> bool:
+    """Gọi từ fay_core sau khi TTS tạo xong file audio.
+
+    Returns True nếu Wav2Lip sẽ xử lý audio (caller nên bỏ qua
+    pipeline audio bình thường để tránh phát âm thanh 2 lần).
+    Returns False nếu Wav2Lip không khả dụng (caller tự phát audio).
+    """
     if not audio_path or not os.path.exists(audio_path):
-        return
+        return False
+    from avatar import config as _cfg
+    wav2lip_available = (
+        os.path.exists(_cfg.WAV2LIP_INFERENCE)
+        and os.path.exists(_cfg.WAV2LIP_CHECKPOINT)
+    )
+    if not wav2lip_available:
+        return False
     lip_sync.submit(audio_path)
+    return True  # Wav2Lip sẽ phát audio qua lipsync video khi gen xong
 
 
 def stop():
