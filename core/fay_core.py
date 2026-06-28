@@ -1622,6 +1622,13 @@ class FeiFei:
                             result = self.sp.to_sample(filtered_text, mood_voice)
                             self.__set_tts_cache(cache_key, result)
 
+                        # Trigger lip sync avatar sau khi TTS tạo xong audio
+                        try:
+                            from avatar import pipeline as avatar_pipeline
+                            if result:
+                                avatar_pipeline.on_audio_ready(result)
+                        except Exception:
+                            pass
 
                         # 合成完成后再次检查会话是否仍有效，避免继续输出旧会话结果
 

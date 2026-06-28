@@ -400,6 +400,13 @@ def start():
     except Exception as e:
         util.log(1, f'embedding 服务预热失败: {str(e)}')
 
+    # Khởi động avatar pipeline (video display + lip sync)
+    try:
+        from avatar import pipeline as avatar_pipeline
+        avatar_pipeline.start()
+    except Exception as e:
+        util.log(2, f'[Avatar] Bỏ qua avatar pipeline: {e}')
+
     #开启核心服务
     util.log(1, '开启核心服务...')
     feiFei = get_fay_core().FeiFei()
