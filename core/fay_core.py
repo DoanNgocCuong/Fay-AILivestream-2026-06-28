@@ -1536,6 +1536,7 @@ class FeiFei:
 
 
             result = None
+            _lipsync_handles_audio = False  # init early — may be overridden inside TTS block
 
 
             audio_url = interact.data.get('audio', None)#透传的音频
@@ -1602,7 +1603,6 @@ class FeiFei:
                     filtered_text = self.__normalize_tts_text(filtered_text)
 
 
-                    _lipsync_handles_audio = False  # khởi tạo trước khi vào block
                     if filtered_text is not None and filtered_text.strip() != "":
 
 
