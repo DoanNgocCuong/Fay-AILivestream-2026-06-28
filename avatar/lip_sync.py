@@ -88,6 +88,18 @@ def _worker_loop():
             util.log(2, "[LipSync] Wav2Lip thất bại, bỏ qua")
 
 
+def _get_env_with_ffmpeg() -> dict:
+    """Trả về environ với ffmpeg từ imageio trong PATH."""
+    env = os.environ.copy()
+    try:
+        import imageio_ffmpeg
+        ffmpeg_dir = os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
+        env['PATH'] = ffmpeg_dir + os.pathsep + env.get('PATH', '')
+    except Exception:
+        pass
+    return env
+
+
 def _run_wav2lip(face: str, audio: str, output: str) -> bool:
     cmd = [
         sys.executable,
@@ -96,6 +108,7 @@ def _run_wav2lip(face: str, audio: str, output: str) -> bool:
         "--face", face,
         "--audio", audio,
         "--outfile", output,
+        "--resize_factor", "4",  # CPU-friendly: giảm resolution → nhanh hơn ~4x
         "--nosmooth",
     ]
     try:
@@ -104,7 +117,8 @@ def _run_wav2lip(face: str, audio: str, output: str) -> bool:
             cwd=config.WAV2LIP_DIR,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
+            env=_get_env_with_ffmpeg(),
         )
         if result.returncode != 0:
             util.log(2, f"[LipSync] Wav2Lip error: {result.stderr[-500:]}")

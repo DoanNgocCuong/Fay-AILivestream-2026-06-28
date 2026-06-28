@@ -131,3 +131,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Wav2Lip — checkpoint và output không commit (quá lớn)
+avatar/Wav2Lip/checkpoints/
+avatar/Wav2Lip/temp/
+avatar/Wav2Lip/results/
+avatar/output/
+avatar/assets/test_short.*
