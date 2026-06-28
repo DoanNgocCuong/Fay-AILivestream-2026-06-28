@@ -4,6 +4,79 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Success #2] — 2026-06-28 — Video loop + Audio A/V sync + Auto-fit window
+
+### Mục tiêu đạt được
+- Video avatar phát vòng lặp liên tục (IDLE mode)
+- Khi AI trả lời: video dừng, audio phát
+- Khi audio xong: video tiếp tục từ vị trí cũ
+- Audio và video KHÔNG bị lệch nhau (audio-clock-driven sync)
+- Cửa sổ tự co vừa màn hình desktop, user có thể kéo resize
+
+### avatar/video_display.py — Refactor toàn bộ A/V sync
+
+**Vấn đề cũ:**
+- Audio (pygame) và video (time.sleep) chạy 2 đồng hồ độc lập
+- `time.sleep(1/FPS)` không trừ thời gian render → drift tích lũy
+- `cv2.waitKey(1)` bên ngoài loop thêm ~1-2ms/frame không được tính
+- Config hardcode `FPS=25` nhưng video gốc là 30fps → video chậm hơn audio 17%
+
+**Fix:**
+- Thêm `_precise_sleep(frame_start, duration)`: tính thời gian còn lại sau xử lý frame, không sleep thừa
+- Thêm audio-clock-driven sync cho IDLE mode:
+  - `pygame.mixer.music.get_pos()` lấy vị trí audio chính xác (hardware clock)
+  - Tính `target_frame = audio_pos_ms / 1000 * fps`
+  - Nếu video chậm hơn audio → `cap.set(POS_FRAMES, target_frame)` skip bắt kịp
+  - Nếu video nhanh hơn audio → sleep 1 frame chờ
+- Thêm audio-clock-driven sync cho SPEAKING mode (`_play_once`): cùng cơ chế
+- Video loop: khi hết video → `pygame.mixer.music.rewind()` + `play()` đồng bộ lại từ đầu
+
+**Thêm `_fit_to_screen()`:**
+- Dùng `tkinter` đọc screen resolution thực tế
+- Scale window xuống 90% màn hình, giữ nguyên aspect ratio
+- Không bao giờ upscale (scale cap ở 1.0)
+- Ví dụ: video 1080×1920 trên màn hình 1536×960 → window 486×864
+
+**Thêm letterbox `_resize()`:**
+- Giữ aspect ratio khi resize frame
+- Nếu tỷ lệ nguồn ≠ tỷ lệ đích → thêm viền đen (letterbox)
+- Tránh stretch méo hình
+
+### avatar/config.py — Auto-detect thay vì hardcode
+
+- `WIDTH = None`, `HEIGHT = None`: tự detect từ video gốc lúc khởi động
+- `FPS = 25`: chỉ là fallback khi không đọc được FPS từ video
+- Video gốc 1080×1920 @ 30fps được detect tự động, không cần sửa config
+
+### utils/config_util.py — Load .env + Fix embedding skip
+
+**Load .env tự động:**
+- Đọc `.env` ở thư mục gốc trước khi load `system.conf`
+- Parse `KEY=VALUE`, bỏ qua comment `#` và dòng trống
+- Dùng `os.environ.setdefault` → không override biến env đã có sẵn
+
+**Đọc Gemini API key từ env:**
+- Expand `%ENV_VAR%` và `${ENV_VAR}` trong `gpt_api_key`
+- Fallback: `os.environ.get('GEMINI_API_KEY')` nếu `system.conf` để trống
+- Kết quả: key chỉ cần đặt trong `.env`, không hardcode vào `system.conf`
+
+**Fix embedding spam 400 error:**
+- Trước: `embedding_api_base_url = embedding_base_url or gpt_base_url` → gọi Gemini `/embeddings` → 400
+- Sau: chỉ enable embedding nếu `embedding_api_model` được cấu hình rõ
+- Nếu model trống → `embedding_api_base_url = None` → skip API, dùng mock vector ngay
+- Không còn spam log lỗi 400 mỗi request
+
+**Fix BOM trong system.conf:**
+- Đổi `encoding='UTF-8'` → `encoding='utf-8-sig'` khi đọc configparser
+- `utf-8-sig` tự strip BOM `﻿` nếu có, không ảnh hưởng file không có BOM
+
+### .env (mới)
+- File template chứa API keys, không commit lên git
+- `GEMINI_API_KEY=` — điền key Gemini tại đây
+- Đã có trong `.gitignore`
+
+---
+
 ## [Phase 1 Demo] — 2026-06-28 (cập nhật lần 2)
 
 ### AI Livestream Vietnamese Sales Host — Doctor Bee / Nhộng Ong Haircare

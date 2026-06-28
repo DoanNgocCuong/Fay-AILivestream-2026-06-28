@@ -15,9 +15,11 @@ LIPSYNC_OUTPUT = os.path.join(OUTPUT_DIR, "lipsync_current.mp4")
 
 # Display
 WINDOW_NAME = "Linh - Dr.Bee AI Host"
-FPS = 25
-WIDTH = 720
-HEIGHT = 1280  # portrait cho livestream
+FPS = 25  # fallback FPS nếu video không đọc được
+# WIDTH/HEIGHT: None = tự detect từ video gốc lúc khởi động
+# Nếu muốn override cứng thì set số (vd: WIDTH=720, HEIGHT=1280)
+WIDTH = None
+HEIGHT = None
 
 # Thư mục output
 os.makedirs(OUTPUT_DIR, exist_ok=True)

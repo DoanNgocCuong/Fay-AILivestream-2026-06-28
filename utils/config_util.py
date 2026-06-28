@@ -8,6 +8,17 @@ from threading import Lock
 import threading
 from utils import util
 
+# Load .env nếu tồn tại (trước mọi thứ khác)
+_env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+if os.path.exists(_env_path):
+    with open(_env_path, encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _, _v = _line.partition('=')
+                if _v.strip():  # chỉ set nếu có giá trị, không override env đã có
+                    os.environ.setdefault(_k.strip(), _v.strip())
+
 # 条件导入 langsmith
 try:
     # 检查是否有相关环境变量或包可用
@@ -503,7 +514,7 @@ def load_config(force_reload=False):
     else:
         system_config = ConfigParser()
         if os.path.exists(system_conf_path):
-            system_config.read(system_conf_path, encoding='UTF-8')
+            system_config.read(system_conf_path, encoding='utf-8-sig')
             _save_system_config_to_env(
                 system_config,
                 project_id=CONFIG_SERVER['PROJECT_ID'] if using_config_center else None,
@@ -526,6 +537,14 @@ def load_config(force_reload=False):
     baidu_emotion_api_key = system_config.get('key', 'baidu_emotion_api_key', fallback=None)
     baidu_emotion_secret_key = system_config.get('key', 'baidu_emotion_secret_key', fallback=None)
     key_gpt_api_key = system_config.get('key', 'gpt_api_key', fallback=None)
+    # Expand %ENV_VAR% hoặc ${ENV_VAR} nếu giá trị là env var reference
+    if key_gpt_api_key and key_gpt_api_key.startswith('%') and key_gpt_api_key.endswith('%'):
+        key_gpt_api_key = os.environ.get(key_gpt_api_key[1:-1], key_gpt_api_key)
+    elif key_gpt_api_key and key_gpt_api_key.startswith('${') and key_gpt_api_key.endswith('}'):
+        key_gpt_api_key = os.environ.get(key_gpt_api_key[2:-1], key_gpt_api_key)
+    # Fallback: đọc thẳng từ env GEMINI_API_KEY nếu chưa có
+    if not key_gpt_api_key:
+        key_gpt_api_key = os.environ.get('GEMINI_API_KEY')
     gpt_model_engine = system_config.get('key', 'gpt_model_engine', fallback=None)
     ASR_mode = system_config.get('key', 'ASR_mode', fallback=None)
     local_asr_ip = system_config.get('key', 'local_asr_ip', fallback=None)
@@ -542,11 +561,16 @@ def load_config(force_reload=False):
     volcano_tts_cluster = system_config.get('key', 'volcano_tts_cluster', fallback=None)
     volcano_tts_voice_type = system_config.get('key', 'volcano_tts_voice_type', fallback=None)
 
-    # 读取 Embedding API 配置（base_url 可单独配置，未配置则复用 LLM）
-    embedding_api_model = system_config.get('key', 'embedding_api_model', fallback='BAAI/bge-large-zh-v1.5')
-    _embedding_base_url_cfg = system_config.get('key', 'embedding_base_url', fallback='')
-    embedding_api_base_url = _embedding_base_url_cfg.strip() or gpt_base_url
-    embedding_api_key = key_gpt_api_key  # 复用 LLM api_key
+    # 读取 Embedding API 配置
+    embedding_api_model = system_config.get('key', 'embedding_api_model', fallback='').strip()
+    _embedding_base_url_cfg = system_config.get('key', 'embedding_base_url', fallback='').strip()
+    # 只有明确配置了 embedding_api_model 才启用外部 embedding，否则用 mock（避免把 LLM URL 误当 embedding 用）
+    if embedding_api_model:
+        embedding_api_base_url = _embedding_base_url_cfg or gpt_base_url
+        embedding_api_key = key_gpt_api_key
+    else:
+        embedding_api_base_url = None
+        embedding_api_key = None
 
     start_mode = system_config.get('key', 'start_mode', fallback=None)
     fay_url = system_config.get('key', 'fay_url', fallback=None)
