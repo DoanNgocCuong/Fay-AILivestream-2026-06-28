@@ -52,6 +52,120 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Success #3] — 2026-06-28 — Wav2Lip lip sync chính xác + blend mượt vào luồng video chính
+
+### Mục tiêu đạt được
+
+- **Nhép môi chuẩn đúng câu chữ trên đoạn AUDIO OUTPUT** — Wav2Lip sinh ra đúng khẩu hình tiếng Việt khớp với từng âm tiết AI nói
+- **Blend cực mượt vào luồng video chính** — lipsync video chèn liền mạch vào giữa idle video loop, không giật, không cut đột ngột
+- **Pipeline đồng bộ hoàn chỉnh:** audio (<1s) → nhép môi gen (10–20s) → lipsync video + audio phát khớp nhau
+- **Nguyên tắc fallback:** khách không bao giờ nghe im lặng — nếu Wav2Lip fail, audio TTS vẫn phát qua channel riêng
+
+### Luồng hoạt động mới (so với Success #2)
+
+```
+Khách comment
+    ↓
+AI think + TTS generate audio file (<1s)
+    ↓
+Wav2Lip available? YES → submit audio vào queue async
+                         → SKIP phát audio ngay (tránh double audio)
+    ↓
+[10–20s Wav2Lip inference — background, không block pipeline]
+    ↓
+Wav2Lip xong → play_lipsync(video_with_embedded_audio)
+    ↓
+OpenCV window: dừng idle → phát lipsync video CÓ AUDIO khớp nhép môi
+    ↓
+Lipsync xong → idle video tiếp tục từ frame 0
+```
+
+### avatar/pipeline.py — on_audio_ready() trả về bool
+
+**Thay đổi:**
+- `on_audio_ready(audio_path) -> bool` — trả về `True` nếu Wav2Lip handle audio
+- Khi `True`: caller bỏ qua Fay audio pipeline, tránh phát audio 2 lần (TTS ngay + lipsync video sau)
+- Khi `False` (Wav2Lip không khả dụng): return False → caller tự phát audio bình thường
+
+### core/fay_core.py — Skip audio pipeline khi Wav2Lip handle
+
+**Thay đổi:**
+- `_lipsync_handles_audio = False` — init ngay cạnh `result = None` (tránh UnboundLocalError mọi code path)
+- Sau TTS xong: gọi `avatar_pipeline.on_audio_ready(result)`
+- Nếu trả về `True` → **không** gọi `MyThread(__process_output_audio)` → audio chỉ đến từ lipsync video
+- Nếu trả về `False` → gọi `__process_output_audio` bình thường như cũ
+
+**Fix UnboundLocalError:**
+- Variable `_lipsync_handles_audio` trước được init bên trong 3 lớp `if` lồng nhau
+- Code path thứ 2 (chunked text output) không chạm assignment → `UnboundLocalError`
+- Fix: đưa init lên `result = None` level — đảm bảo mọi branch đều có giá trị
+
+### avatar/lip_sync.py — Fallback audio khi Wav2Lip fail
+
+**Nguyên tắc:** khách không được biết là AI Livestream — không bao giờ để im lặng.
+
+**Các trường hợp fallback mới:**
+- `face_input` không tồn tại (chưa có file avatar) → `_fallback_play_audio(audio_path)`
+- `_run_wav2lip()` trả về `False` (inference lỗi / timeout) → `_fallback_play_audio(audio_path)`
+
+**`_fallback_play_audio(audio_path)`:**
+- Dùng `pygame.mixer.Sound` (channel riêng) — không đụng idle video `.music` channel
+- Block worker thread cho đến khi audio phát xong (`channel.get_busy()` polling)
+- Auto-convert không phải `.wav` bằng `_extract_audio_wav()` (ffmpeg) trước khi play
+- Try/except toàn bộ → nếu pygame cũng fail, log lỗi và tiếp tục (không crash)
+
+### avatar/video_display.py — Fix 2 bugs sau khi speaking xong
+
+**Bug 1: Video freeze sau khi lipsync kết thúc**
+- Root cause: sau `_play_once()`, `_idle_cap` ở frame N (vị trí cũ). Idle audio restart từ 0.
+  Audio-clock sync tính `gap = 0 - N = rất âm` → `return` mà không hiển thị frame → video đứng hình N/fps giây
+- Fix: sau `SPEAKING → IDLE`, `self._idle_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)` reset về đầu
+
+**Bug 2: Lipsync video không hiển thị nếu audio extract fail**
+- Root cause: nếu `_extract_audio_wav()` trả về `None`, `pygame.get_pos()` = -1 ngay lập tức → `break` trước khi hiển thị frame nào
+- Fix: `use_audio_sync = _pygame_available and wav is not None`
+  - Nếu có audio → audio-clock-driven sync (như cũ)
+  - Nếu không có audio → time-based playback (`time.sleep(frame_duration)` mỗi frame)
+
+### avatar/Wav2Lip/inference.py — Fix ffmpeg path không tồn tại
+
+**Vấn đề:** `imageio_ffmpeg.get_ffmpeg_exe()` trả về path nhưng file không tồn tại trên máy (chưa download / wrong version) → `WinError 2: The system cannot find the file specified` ở bước mux cuối (sau ~60 phút inference!)
+
+**Fix:**
+```python
+import shutil as _shutil
+try:
+    import imageio_ffmpeg as _iio_ffmpeg
+    _candidate = _iio_ffmpeg.get_ffmpeg_exe()
+    _FFMPEG = _candidate if os.path.isfile(_candidate) else (_shutil.which('ffmpeg') or 'ffmpeg')
+except Exception:
+    _FFMPEG = _shutil.which('ffmpeg') or 'ffmpeg'
+```
+- Check `os.path.isfile()` trước khi dùng path từ imageio
+- Fallback `shutil.which('ffmpeg')` tìm ffmpeg trong PATH (được inject bởi `lip_sync.py`)
+- Đảm bảo mux step không bao giờ fail vì path
+
+### llm/nlp_cognitive_stream.py — Dịch internal messages sang tiếng Việt
+
+**Vấn đề:** Edge-TTS voice `vi-VN-HoaiMyNeural` không synthesize được tiếng Trung → TTS fail với `"No audio was received"` cho các internal status messages.
+
+**Messages đã dịch:**
+| Chinese (cũ) | Vietnamese (mới) |
+|---|---|
+| `等等，我再帮你核实一下…` | `Để Linh xác nhận lại thông tin cho bạn nhé…` |
+| `我来帮你查一下，稍等…` | `Để mình kiểm tra giúp bạn, chờ chút nhé…` |
+| `抱歉，处理结果时出了点问题。` | `Xin lỗi, có chút trục trặc khi xử lý kết quả.` |
+| `抱歉，我现在太忙了...` | `Xin lỗi, mình đang bận quá, bạn thử lại sau nhé.` |
+| `抱歉，我的大脑暂时开了小差...` | `Xin lỗi, mình gặp chút sự cố, bạn thử lại sau nhé.` |
+
+### Next Steps
+
+- **Logic thông minh chèn lipsync:** AI quyết định điểm dừng idle video hợp lý (cuối câu / giữa chuyển động nhẹ) thay vì ghép ngay khi gen xong
+- **S4:** Auto-read comment Facebook Live (Selenium scraper)
+- **S5:** OBS → RTMP → Facebook/TikTok Live stream
+
+---
+
 ## [Success #2] — 2026-06-28 — Video loop + Audio A/V sync + Auto-fit window
 
 ### Mục tiêu đạt được
