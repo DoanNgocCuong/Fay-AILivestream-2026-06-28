@@ -77,6 +77,58 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Success #1] — 2026-06-28 — commit `4abd566`
+
+### Mục tiêu đạt được
+Khách chat → AI reply bằng **audio tiếng Việt** + **icon mấp máy miệng** góc trái màn hình.
+Đây là lần đầu tiên pipeline hoạt động end-to-end: text input → LLM → TTS → audio phát + animation.
+
+### Chi tiết kỹ thuật
+
+**Persona & LLM (Vietnamese AI Sales Host):**
+- `config.json`: thiết lập nhân vật **Linh** — AI sales host thương hiệu Dr.Bee Nhộng Ong Haircare
+- `llm/nlp_cognitive_stream.py`: system prompt tiếng Việt — tư vấn bán hàng, xử lý objection, upsell combo 590K
+- `qa.csv`: 16 cặp Q&A tiếng Việt về sản phẩm Dr.Bee (gội đầu, dưỡng tóc, bảng giá, thành phần)
+- LLM backend: **Google Gemini 2.5 Flash** qua OpenAI-compatible endpoint
+
+**TTS tiếng Việt (Edge-TTS):**
+- `tts/tts_voice.py`: thêm 2 giọng Việt mới:
+  - `Hoài My (vi-nữ)` — `vi-VN-HoaiMyNeural` — giọng nữ miền Nam
+  - `Nam Minh (vi-nam)` — `vi-VN-NamMinhNeural` — giọng nam
+- Miễn phí, không cần API key, độ trễ ~500ms
+
+**Icon mấp máy miệng:**
+- Fay mặc định có widget face animation ở góc trái màn hình (built-in)
+- Khi TTS phát audio → widget tự động animate mấp máy theo biên độ âm thanh
+- Không cần code thêm — chỉ cần TTS hoạt động đúng là icon chạy
+
+**UI Việt hoá toàn bộ (Chinese → Vietnamese):**
+- `gui/templates/index.html`: toàn bộ chat interface, placeholder, nhãn nút
+- `gui/templates/setting.html`: trang cài đặt, labels, descriptions
+- `gui/static/js/setting.js`: alerts, dialogs, confirm messages
+- `gui/static/js/script.js`: comments trong code
+- `gui/flask_server.py`: comments, docstrings, error messages
+
+**Config & Tooling:**
+- `system.conf.example`: template cấu hình với placeholder (không chứa key thật)
+- `system.conf` + `verifier.json` → thêm vào `.gitignore` tránh lộ key
+- `cache_data/config.json`: bản copy config cần thiết lúc runtime
+- `START_DEMO.bat`: launcher Windows 1-click, check Python, in hướng dẫn
+- `OBS_SETUP_GUIDE.md`: hướng dẫn kết nối OBS để stream lên Facebook/TikTok
+
+### Pipeline hoàn chỉnh Success #1
+```
+Khách gõ comment vào chat UI (http://127.0.0.1:5000)
+    ↓
+Fay AI (Linh) xử lý qua Gemini 2.5 Flash
+    ↓
+Edge-TTS tổng hợp audio tiếng Việt (giọng Hoài My)
+    ↓
+Audio phát ra loa + Icon face ở góc trái mấp máy miệng theo âm thanh
+```
+
+---
+
 ## [Phase 1 Demo] — 2026-06-28 (cập nhật lần 2)
 
 ### AI Livestream Vietnamese Sales Host — Doctor Bee / Nhộng Ong Haircare
