@@ -70,7 +70,8 @@ def _worker_loop():
 
         face_input = _get_face_input()
         if not face_input:
-            util.log(2, "[LipSync] Chưa có file avatar. Đặt avatar vào avatar/assets/avatar.jpg hoặc avatar_idle.mp4")
+            util.log(2, "[LipSync] Chưa có file avatar → fallback phát audio trực tiếp")
+            _fallback_play_audio(audio_path)
             continue
 
         output_path = os.path.join(
@@ -88,7 +89,33 @@ def _worker_loop():
             util.log(1, f"[LipSync] Hoàn thành trong {elapsed}s → {os.path.basename(output_path)}")
             get_display().play_lipsync(output_path)
         else:
-            util.log(2, "[LipSync] Wav2Lip thất bại, bỏ qua")
+            util.log(2, "[LipSync] Wav2Lip thất bại → fallback phát audio trực tiếp")
+            _fallback_play_audio(audio_path)
+
+
+def _fallback_play_audio(audio_path: str):
+    """Phát TTS audio trực tiếp khi Wav2Lip fail — khách vẫn nghe được response.
+    Dùng pygame.mixer.Sound (channel riêng) để không đụng idle video music channel.
+    """
+    try:
+        import pygame
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        wav_path = audio_path
+        # Nếu không phải wav, dùng ffmpeg convert
+        if not audio_path.lower().endswith('.wav'):
+            from avatar.video_display import _extract_audio_wav
+            converted = _extract_audio_wav(audio_path)
+            if converted:
+                wav_path = converted
+        sound = pygame.mixer.Sound(wav_path)
+        channel = sound.play()
+        if channel:
+            # Block cho đến khi audio xong (đang trong worker thread nên OK)
+            while channel.get_busy():
+                time.sleep(0.1)
+    except Exception as e:
+        util.log(2, f"[LipSync] Fallback audio thất bại: {e}")
 
 
 def _get_env_with_ffmpeg() -> dict:
