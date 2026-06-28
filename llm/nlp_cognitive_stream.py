@@ -2500,6 +2500,17 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
     except Exception as exc:
         util.log(1, f"注入 MCP Resources 失败: {exc}")
 
+    # Inject product knowledge base directly into system prompt
+    try:
+        _kb_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "data_san_pham.md")
+        if os.path.exists(_kb_path):
+            with open(_kb_path, "r", encoding="utf-8") as _f:
+                _kb_content = _f.read().strip()
+            if _kb_content:
+                system_prompt += f"\n\n**KIẾN THỨC SẢN PHẨM DR.BEE**\nDùng thông tin dưới đây để tư vấn chính xác cho khách. KHÔNG bịa thêm thông tin ngoài phạm vi này.\n\n{_kb_content}\n"
+    except Exception as exc:
+        util.log(1, f"Không load được knowledge base sản phẩm: {exc}")
+
     # 根据配置决定是否按用户隔离历史消息
     try:
         cfg.load_config()
