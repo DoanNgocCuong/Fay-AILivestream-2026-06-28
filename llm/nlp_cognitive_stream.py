@@ -2255,7 +2255,7 @@ def _auto_reply_after_execution(username, finished_exec_state):
         except Exception as exc:
             util.log(1, f"小模型最终回复流式生成失败: {exc}")
             if not full_text:
-                accumulated = "抱歉，处理结果时出了点问题。"
+                accumulated = "Xin lỗi, có chút trục trặc khi xử lý kết quả."
                 full_text = accumulated
 
         # 刷出剩余文本
@@ -2903,7 +2903,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
             return True
         except Exception as exc:
             util.log(1, f"请求失败: {type(exc).__name__}: {exc}")
-            error_message = "抱歉，我现在太忙了，休息一会，请稍后再试。"
+            error_message = "Xin lỗi, mình đang bận quá, bạn thử lại sau nhé."
             write_sentence(error_message, force_first=is_first_sentence)
             is_first_sentence = False
             full_response_text = error_message
@@ -2977,7 +2977,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
             stream_response_chunks(llm.stream(final_messages))
         except Exception as exc:
             util.log(1, f"小模型最终回复失败: {exc}")
-            write_sentence("抱歉，处理结果时出了点问题。", force_first=is_first_sentence)
+            write_sentence("Xin lỗi, có chút trục trặc khi xử lý kết quả.", force_first=is_first_sentence)
             is_first_sentence = False
 
         if not sm.should_stop_generation(username, conversation_id=conversation_id):
@@ -3087,7 +3087,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
     def _on_tool_detected() -> None:
         """流式中检测到 tool action → 立即推送过渡语给用户"""
         nonlocal is_first_sentence
-        write_sentence("我来帮你查一下，稍等…\n", force_first=is_first_sentence)
+        write_sentence("Để mình kiểm tra giúp bạn, chờ chút nhé…\n", force_first=is_first_sentence)
         is_first_sentence = False
 
     try:
@@ -3098,7 +3098,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
         )
     except Exception as llm_err:
         util.log(1, f"[大小模型] {username}: 规划器LLM调用失败: {llm_err}")
-        error_reply = "抱歉，我的大脑暂时开了小差，请稍后再试一下。"
+        error_reply = "Xin lỗi, mình gặp chút sự cố, bạn thử lại sau nhé."
         write_sentence(error_reply, force_first=is_first_sentence)
         if not sm.should_stop_generation(username, conversation_id=conversation_id):
             finalize_stream(force_end=True)
@@ -3116,7 +3116,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
         util.log(1, f"[大小模型] {username}: 需调用工具 {t_name}，提交后台执行")
 
         if show_plan_msg:
-            plan_msg = "我来帮你查一下，稍等…\n"
+            plan_msg = "Để mình kiểm tra giúp bạn, chờ chút nhé…\n"
             write_sentence(plan_msg, force_first=is_first_sentence)
             is_first_sentence = False
 
@@ -3186,7 +3186,7 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
                 write_sentence(accumulated_text, force_first=is_first_sentence)
                 is_first_sentence = False
                 accumulated_text = ""
-            verify_msg = "\n\n等等，我再帮你核实一下…\n\n---\n"
+            verify_msg = "\n\nĐể Linh xác nhận lại thông tin cho bạn nhé…\n\n---\n"
             write_sentence(verify_msg)
             full_response_text += verify_msg
             # 不硬编码工具，交由大模型基于 unverified_response 自行选择核实工具
