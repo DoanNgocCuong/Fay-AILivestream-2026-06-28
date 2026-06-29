@@ -153,3 +153,117 @@ Bước 3: Giải pháp 2 (look-ahead) — nếu video dài, startup quá chậm
 | `avatar/video_display.py` | Thêm `_precompute_good_frames()` trong `_run()`, sửa logic pause |
 | `avatar/pipeline.py` | Thêm timing predictor, notify display trước khi lipsync xong |
 | `avatar/config.py` | Thêm `MOTION_THRESHOLD`, `SILENCE_THRESHOLD`, `CPU_FACTOR` |
+
+---
+
+## Phần 2 — Research Model Nhép Môi (Lipsync Model Selection)
+
+**Cập nhật:** 2026-06-28
+**Bối cảnh:** Wav2Lip CPU ~103s/clip 4.3s → không real-time được cho production livestream
+
+### Hardware roadmap
+
+| Giai đoạn | Hardware | Hướng giải pháp |
+|-----------|---------|----------------|
+| **Hiện tại** | CPU only | Cloud API hoặc chấp nhận delay lớn |
+| **Sắp tới** | GPU NVIDIA (upgrade) | Local model real-time |
+
+---
+
+### Bài toán latency — MECE cases khi khách hỏi trên Livestream
+
+Livestream thực tế: host (avatar Linh) đang nói chuyện liên tục. Khách comment → AI cần trả lời. Trong lúc chờ AI xử lý, host cần "fill" tự nhiên để không bị im lặng ngượng ngùng.
+
+#### Case 1 — Khách hỏi về sản phẩm đang bán (Dr.Bee Nhộng Ong)
+
+| Sub-case | Ví dụ | Độ dài reply | Latency chấp nhận |
+|---------|-------|-------------|-----------------|
+| 1a. Câu hỏi đơn giản | "giá bao nhiêu?", "mua ở đâu?" | 1-2 câu (~5s audio) | **< 5s** — phải nhanh, khách đang chờ giá |
+| 1b. Câu hỏi chi tiết | "thành phần có gì?", "dùng cho tóc dầu được không?" | 3-4 câu (~12s audio) | **5-15s OK** — host có thể fill "Để Linh xem lại thông tin cho bạn nhé..." |
+| 1c. Câu hỏi so sánh / objection | "sao đắt vậy?", "khác gì hàng khác?" | 4-5 câu (~18s audio) | **10-20s OK** — host fill "Câu hỏi hay lắm bạn ơi, để Linh giải thích nhé..." |
+
+**→ Target latency cho Case 1: < 15s** (đủ để fill 1 câu bridge ngắn)
+
+#### Case 2 — Khách hỏi sản phẩm khác / off-topic
+
+| Sub-case | Ví dụ | Hành vi AI | Latency cần |
+|---------|-------|-----------|------------|
+| 2a. Sản phẩm cùng thương hiệu | "Dr.Bee có dầu gội không?" | Redirect khéo về Nhộng Ong | **< 5s** |
+| 2b. Sản phẩm đối thủ | "X-Men ngon hơn không?" | Không so sánh, highlight Dr.Bee | **< 5s** |
+| 2c. Hoàn toàn off-topic | "ai thắng World Cup?" | Nhẹ nhàng redirect về stream | **< 3s** — câu ngắn, không cần nghĩ nhiều |
+
+**→ Target latency cho Case 2: < 5s** (reply ngắn, không cần elaborate)
+
+#### Case 3 — Khách spam / troll / chửi
+
+| Sub-case | Ví dụ | Hành vi AI | Latency cần |
+|---------|-------|-----------|------------|
+| 3a. Spam emoji / ký tự | "😂😂😂😂" | Bỏ qua hoặc reply vui | **< 2s** |
+| 3b. Comment chửi / toxic | "đồ lừa đảo" | Calm down, không defend | **< 3s** — không được im lặng lâu |
+| 3c. Hỏi "bạn có phải AI không?" | "mày là robot à?" | Khéo léo chuyển hướng | **< 5s** |
+
+**→ Target latency cho Case 3: < 3s** (phản ứng nhanh = chuyên nghiệp)
+
+#### Tổng kết latency target
+
+```
+Case 1 (sản phẩm đang bán):  < 15s  ← quan trọng nhất, chiếm ~70% comment
+Case 2 (off-topic):           < 5s   ← chiếm ~20% comment
+Case 3 (spam/troll):          < 3s   ← chiếm ~10% comment
+
+→ Mục tiêu thiết kế hệ thống: P90 < 15s, P99 < 30s
+```
+
+**Fill content trong lúc chờ (quan trọng):**
+- "Để Linh xem lại thông tin cho bạn nhé..." (~2s fill)
+- "Câu hỏi hay quá bạn ơi..." (~1.5s fill)
+- "Ừ bạn hỏi đúng lắm đó..." (~1.5s fill)
+→ Tổng fill có thể che được 3-5s delay mà không bị lộ
+
+---
+
+### Landscape các model nhép môi hiện có
+
+#### Nhóm A — Local Models (cần GPU để real-time)
+
+| Model | Tổ chức | Tốc độ (RTX 3090) | Chất lượng | Ghi chú |
+|-------|---------|-------------------|------------|---------|
+| **Wav2Lip** *(đang dùng)* | Research | ~103s/4.3s clip (CPU) | ⭐⭐⭐ | Chuẩn baseline, chậm trên CPU |
+| **MuseTalk** | Microsoft | Real-time ~30fps | ⭐⭐⭐⭐ | Thiết kế cho livestream, streaming avatar |
+| **LatentSync** | ByteDance | Fast batch | ⭐⭐⭐⭐⭐ | Chất lượng cao nhất hiện tại |
+| **LivePortrait** | Kuaishou | Very fast | ⭐⭐⭐⭐ | Portrait animation, không chỉ môi |
+| **Video-Retalking** | Research | Medium | ⭐⭐⭐⭐ | Tốt hơn Wav2Lip, toàn khuôn mặt |
+| **SadTalker** | Research | Slow | ⭐⭐⭐⭐ | Expressive, nhiều biểu cảm hơn |
+| **Hallo / Hallo2** | Fudan | Medium | ⭐⭐⭐⭐ | Portrait + audio driven |
+| **AniPortrait** | Research | Medium | ⭐⭐⭐ | Full portrait animation |
+| **EchoMimic** | Ant Group | Fast | ⭐⭐⭐⭐ | Audio-driven, tự nhiên |
+| **DiffTalk** | Research | Slow | ⭐⭐⭐ | Diffusion-based, chất lượng cao nhưng chậm |
+
+#### Nhóm B — Cloud APIs (không cần GPU, trả tiền theo phút/request)
+
+| Service | Latency | Giá | Chất lượng | Streaming? |
+|---------|---------|-----|------------|-----------|
+| **D-ID** | ~3-8s | ~$0.10/min | ⭐⭐⭐⭐ | Có streaming API |
+| **HeyGen** | ~5-10s | ~$0.08/min | ⭐⭐⭐⭐⭐ | Có Streaming Avatar API |
+| **Sync.so (Synclabs)** | ~2-5s | ~$0.05/min | ⭐⭐⭐⭐ | Chuyên lip sync, nhanh nhất |
+| **Rask.ai** | ~5-15s | Theo plan | ⭐⭐⭐ | Thiên về dubbing hơn |
+| **Hedra** | ~5-10s | Freemium | ⭐⭐⭐⭐ | Character video |
+| **Tavus** | ~2-3s | Enterprise | ⭐⭐⭐⭐⭐ | Real-time conversational video |
+
+---
+
+### Đề xuất lộ trình chọn model
+
+```
+Giai đoạn HIỆN TẠI (CPU only):
+  → Dùng Cloud API: Sync.so hoặc D-ID
+  → Latency ~3-8s, đủ cho production với fill content
+  → Chi phí: ~$10-50/tháng cho demo volume
+
+Giai đoạn SẮP TỚI (có GPU):
+  → Chuyển sang MuseTalk (real-time) hoặc LatentSync (quality cao nhất)
+  → Latency < 1s, zero cost per request
+  → Không phụ thuộc cloud
+```
+
+**→ Việc cần làm tiếp theo:** Test thử Sync.so API với 1 clip mẫu, so sánh chất lượng + latency với Wav2Lip hiện tại trước khi quyết định.
