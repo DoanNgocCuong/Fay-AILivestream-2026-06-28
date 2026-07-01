@@ -1,0 +1,65 @@
+# =============================================================
+# Dockerfile.vieneu -- VieNeu-TTS v3 Turbo
+# Base: python:3.12-slim. Torch pip wheel tu bundle CUDA runtime,
+# host chi can driver + nvidia-container-toolkit (khong can nvidia/cuda base image).
+# =============================================================
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/models/.cache
+
+RUN ln -sf /usr/share/zoneinfo/Asia/Ho_Chi_Minh /etc/localtime \
+    && echo "Asia/Ho_Chi_Minh" > /etc/timezone \
+    && apt-get update -q \
+    && apt-get install -y -q --no-install-recommends \
+        git ffmpeg curl \
+        libsndfile1 libportaudio2 \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user -- GPU device access khong can root (nvidia-container-toolkit
+# tu cap quyen device node). Entrypoint se chown volume roi drop xuong user nay.
+RUN useradd -m -u 1000 -s /bin/bash appuser
+
+WORKDIR /workspace
+
+# STEP 1: pin torch TRUOC moi thu khac (M-01, M-07)
+# cu121 -- KHONG dung cu128/cu130, driver host thuong khong forward-compat (Error 804)
+# 2.1.2 khong con tren PyPI index (archived) -- dung 2.5.1 (cu121 available, da verify)
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+        "torch==2.5.1" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu121
+
+# STEP 2: deps thu cong cua vieneu -- KHONG dung extra [gpu] (tranh keo lmdeploy, M-01)
+# Pin version cu the (verified 2026-07-01) -- KHONG de unpinned: rebuild sau nay
+# se keo version moi hon, co the pha vo pin torch o STEP 1/4 (tai dien loi M-24).
+RUN pip install --no-cache-dir \
+        "transformers==4.57.1" \
+        "librosa>=0.11.0" \
+        "neucodec>=0.0.4" \
+        "sea-g2p>=0.7.14" \
+        onnxruntime-gpu \
+        "gradio>=5.49.1" \
+        huggingface_hub \
+        "perth>=0.2.0" \
+        soundfile soxr numpy PyYAML
+
+# STEP 3: vieneu core, khong co extra [gpu]
+# Pin version cu the (verified 2026-07-01) -- cung ly do voi transformers o tren.
+RUN pip install --no-cache-dir "vieneu==3.0.11"
+
+# STEP 4: M-24 FIX: vieneu keo torch moi hon lam dependency, ghi de pin cu121.
+# Re-pin lai torch sau khi cai vieneu.
+RUN pip install --no-cache-dir \
+        "torch==2.5.1" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu121
+
+COPY entrypoint-vieneu.sh /entrypoint-vieneu.sh
+RUN chmod +x /entrypoint-vieneu.sh
+
+EXPOSE 7860
+# Entrypoint chay dau la root (de chown volume /models), roi tu drop xuong appuser.
+ENTRYPOINT ["/entrypoint-vieneu.sh"]

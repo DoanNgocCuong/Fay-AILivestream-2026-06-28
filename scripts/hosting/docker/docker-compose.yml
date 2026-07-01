@@ -1,0 +1,54 @@
+services:
+  vieneu-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile.vieneu
+    image: doanngoccuong/fay-vieneu-tts:latest
+    container_name: vieneu-tts
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      - HF_HOME=/models/.cache
+    volumes:
+      - ./models/vieneu:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  musetalk:
+    build:
+      context: .
+      dockerfile: Dockerfile.musetalk
+    image: doanngoccuong/fay-musetalk:latest
+    container_name: musetalk
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - HF_HOME=/models/.cache
+    volumes:
+      - ./models/musetalk:/workspace/MuseTalk/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

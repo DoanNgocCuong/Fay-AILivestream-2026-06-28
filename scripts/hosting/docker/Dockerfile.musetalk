@@ -1,0 +1,87 @@
+# =============================================================
+# Dockerfile.musetalk -- MuseTalk lipsync
+# Base: python:3.11-slim -- BAT BUOC (khong dung 3.12).
+# mmcv 2.x khong co prebuilt wheel cho cp312 (M-20); Python 3.11 co san.
+# =============================================================
+FROM python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/models/.cache
+
+RUN ln -sf /usr/share/zoneinfo/Asia/Ho_Chi_Minh /etc/localtime \
+    && echo "Asia/Ho_Chi_Minh" > /etc/timezone \
+    && apt-get update -q \
+    && apt-get install -y -q --no-install-recommends \
+        git ffmpeg curl build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user -- GPU device access khong can root (nvidia-container-toolkit
+# tu cap quyen device node). Entrypoint se chown volume roi drop xuong user nay.
+RUN useradd -m -u 1000 -s /bin/bash appuser
+
+WORKDIR /workspace
+
+# STEP 1: pin torch TRUOC moi thu (M-01, M-07) -- cu121, khop voi mmcv wheel index
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+        "torch==2.5.1" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu121
+
+# STEP 2: MuseTalk app deps (pin chinh xac theo setup_musetalk_venv.sh da verify)
+RUN pip install --no-cache-dir \
+        "opencv-python==4.9.0.80" \
+        "diffusers==0.30.2" \
+        "accelerate==0.28.0" \
+        "transformers==4.39.2" \
+        "huggingface_hub==0.30.2" \
+        "numpy==1.26.4" \
+        "soundfile==0.12.1" \
+        "librosa==0.11.0" \
+        "einops==0.8.1" \
+        omegaconf ffmpeg-python "moviepy<2" "imageio[ffmpeg]" \
+        gdown requests gradio
+
+# STEP 3: setuptools sweet-spot 68.2.2 (M-18 -- 71.x+ bo pkg_resources, 82.x mat han)
+RUN pip install --no-cache-dir "setuptools==68.2.2"
+
+# STEP 4: mmcv prebuilt wheel dung cho cu121 + torch2.5.1 (M-20, tranh build tu source)
+RUN pip install --no-cache-dir mmengine \
+    && pip install --no-cache-dir "mmcv==2.1.0" \
+        -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.5.1/index.html
+
+# STEP 5: mmpose/mmdet -- xtcocotools sdist thieu _mask.c, khong build duoc tu PyPI (M-19).
+# Cai truoc deps thuc su can (tru xtcocotools) + shim xtcocotools -> pycocotools,
+# roi cai mmpose/mmdet voi --no-deps de pip khong dong cham toi xtcocotools that.
+RUN pip install --no-cache-dir \
+        chumpy json_tricks matplotlib munkres scipy pillow terminaltables shapely \
+    && pip install --no-cache-dir pycocotools --no-build-isolation \
+    && SP=$(python3 -c "import site; print(site.getsitepackages()[0])") \
+    && mkdir -p "$SP/xtcocotools" \
+    && printf '# xtcocotools shim -- delegates to pycocotools (M-19)\n' > "$SP/xtcocotools/__init__.py" \
+    && printf 'from pycocotools.coco import COCO\n' > "$SP/xtcocotools/coco.py" \
+    && printf 'from pycocotools.cocoeval import COCOeval\n' > "$SP/xtcocotools/cocoeval.py" \
+    && printf 'from pycocotools import mask\nencode = mask.encode; decode = mask.decode\narea = mask.area; toBbox = mask.toBbox\nfrPyObjects = mask.frPyObjects; iou = mask.iou; merge = mask.merge\n' > "$SP/xtcocotools/mask.py" \
+    && pip install --no-cache-dir --no-deps mmpose mmdet \
+    && pip install --no-cache-dir face-alignment
+
+# STEP 6: re-pin numpy sau mmpose/mmdet (M-23 -- tifffile keo numpy>=2.1, pha cv2 4.9)
+RUN pip install --no-cache-dir "numpy==1.26.4"
+
+# STEP 7: MuseTalk source code (nho, bake vao image OK -- chi weights moi tach ra volume)
+# Pin cung ban commit da verify (2026-07-01) -- KHONG de "--depth 1" tren branch
+# mac dinh: rebuild sau nay se keo commit moi nhat cua upstream, co the pha vo
+# tuong thich voi cac pin version o STEP 1-6 phia tren.
+RUN git clone https://github.com/TMElyralab/MuseTalk.git /workspace/MuseTalk \
+    && cd /workspace/MuseTalk \
+    && git checkout 0a89dec45a0192b824e3cf4daf96c239440c5ed8
+
+WORKDIR /workspace/MuseTalk
+
+COPY entrypoint-musetalk.sh /entrypoint-musetalk.sh
+RUN chmod +x /entrypoint-musetalk.sh
+
+EXPOSE 8080
+# Entrypoint chay dau la root (de chown volume /models), roi tu drop xuong appuser.
+ENTRYPOINT ["/entrypoint-musetalk.sh"]
