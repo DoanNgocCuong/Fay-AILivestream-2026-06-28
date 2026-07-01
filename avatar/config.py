@@ -21,6 +21,14 @@ FPS = 25  # fallback FPS nếu video không đọc được
 WIDTH = None
 HEIGHT = None
 
+# OBS Virtual Camera output
+# Set True để push mỗi frame lên OBS Virtual Camera (cần pip install pyvirtualcam + OBS Virtual Camera driver)
+OBS_VIRTUAL_CAM = False
+# Resolution cố định cho virtual cam (Facebook Live yêu cầu 1920x1080 hoặc 1280x720)
+OBS_CAM_WIDTH = 1280
+OBS_CAM_HEIGHT = 720
+OBS_CAM_FPS = 25
+
 # Thư mục output
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(os.path.dirname(__file__), "assets"), exist_ok=True)

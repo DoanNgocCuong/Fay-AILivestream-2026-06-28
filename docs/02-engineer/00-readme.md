@@ -1,0 +1,1 @@
+Yêu cầu: Viết cực kì đơn giản cho tớ đến nỗi 1 người ngu và bình thường như tớ đọc cũng hiểu về cái đang triển khai là gì, tớ mới học python vỡ lòng nhé. 

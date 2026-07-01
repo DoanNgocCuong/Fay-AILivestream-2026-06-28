@@ -124,6 +124,12 @@ elif cfg.tts_module == 'volcano':
     from tts.volcano_tts import Speech
 
 
+elif cfg.tts_module == 'elevenlabs':
+
+
+    from tts.elevenlabs_tts import Speech
+
+
 else:
 
 
@@ -547,6 +553,12 @@ class FeiFei:
 
                 username = interact.data.get("user", "User")
 
+                # Phat thinking phrase ngay khi nhan comment — doc lap voi Wav2Lip
+                try:
+                    from avatar import fill_phrases as _fp
+                    _fp.play_thinking()
+                except Exception:
+                    pass
 
                 uid = member_db.new_instance().find_user(username)
                 no_reply = interact.data.get("no_reply", False)
@@ -569,6 +581,12 @@ class FeiFei:
 
 
                     self.write_to_file("./logs", "asr_result.txt",  interact.data["msg"])
+
+                    try:
+                        import utils.latency_tracker as _lt
+                        _lt.start(interact.data.get("conversation_id", ""), interact.data.get("msg", ""))
+                    except Exception:
+                        pass
 
 
 
@@ -1256,7 +1274,7 @@ class FeiFei:
                 }
 
 
-                util.log(1, f"流式会话开始: key={conv_map_key}, content_id={content_id}")
+                util.log(1, f"[Stream] Phien hoi thoai moi: key={conv_map_key}, content_id={content_id}")
 
 
             else:
@@ -1606,7 +1624,7 @@ class FeiFei:
                     if filtered_text is not None and filtered_text.strip() != "":
 
 
-                        util.printInfo(1,  interact.data.get('user'), '合成音频...')
+                        util.printInfo(1,  interact.data.get('user'), 'Đang tổng hợp giọng nói (TTS)...')
 
 
                         tm = time.time()
@@ -1629,9 +1647,17 @@ class FeiFei:
                         try:
                             from avatar import pipeline as avatar_pipeline
                             if result:
-                                _lipsync_handles_audio = avatar_pipeline.on_audio_ready(result)
-                        except Exception:
-                            pass
+                                is_end_flag = bool(interact.data.get("isend", False))
+                                _lipsync_handles_audio = avatar_pipeline.on_audio_ready(
+                                    result,
+                                    is_end=is_end_flag,
+                                    conversation_id=interact.data.get("conversation_id"),
+                                )
+                                if _lipsync_handles_audio:
+                                    util.printInfo(1, interact.data.get('user'),
+                                        f"[AI → TTS] xong ({math.floor((time.time() - tm) * 1000)}ms) → đã nhận vào hàng chờ nhép môi")
+                        except Exception as _avatar_err:
+                            util.printInfo(1, interact.data.get('user'), f"[Avatar] Loi pipeline: {_avatar_err}")
 
                         # 合成完成后再次检查会话是否仍有效，避免继续输出旧会话结果
 
@@ -1657,7 +1683,26 @@ class FeiFei:
                             pass
 
 
-                        util.printInfo(1,  interact.data.get("user"), "合成音频完成. 耗时: {} ms 文件:{}".format(math.floor((time.time() - tm) * 1000), result))
+                        util.printInfo(1,  interact.data.get("user"), "TTS xong. Thời gian: {} ms | File: {}".format(math.floor((time.time() - tm) * 1000), result))
+                        try:
+                            import utils.latency_tracker as _lt
+                            _lt.step(interact.data.get("conversation_id", ""), f"TTS xong ({math.floor((time.time() - tm) * 1000)}ms)")
+                        except Exception:
+                            pass
+
+                    else:
+                        # Text rong nhung is_end=True → flush avatar buffer (chunk cuoi cua stream)
+                        if bool(interact.data.get("isend", False)):
+                            try:
+                                from avatar import pipeline as avatar_pipeline
+                                avatar_pipeline.on_audio_ready(
+                                    "",
+                                    is_end=True,
+                                    conversation_id=interact.data.get("conversation_id"),
+                                )
+                                util.printInfo(1, interact.data.get('user'), "[Avatar] Flush buffer (is_end=True, text rong)")
+                            except Exception as _avatar_err:
+                                util.printInfo(1, interact.data.get('user'), f"[Avatar] Loi flush: {_avatar_err}")
 
 
             else:
@@ -1674,6 +1719,16 @@ class FeiFei:
 
 
 
+
+            # Khi stream ket thuc (is_end=True): flush avatar buffer neu chua flush
+            if is_end:
+                try:
+                    from avatar import pipeline as avatar_pipeline
+                    avatar_pipeline.flush_buffer(
+                        conversation_id=interact.data.get("conversation_id")
+                    )
+                except Exception:
+                    pass
 
             # 为数字人音频单独维护连续序号，避免 conversation_msg_no 因无音频片段产生空洞
             audio_conv_id = interact.data.get("conversation_id", "") or ""
@@ -1889,7 +1944,7 @@ class FeiFei:
                 if file_url is not None:
 
 
-                    util.printInfo(1, interact.data.get('user'), '播放音频...')
+                    util.printInfo(1, interact.data.get('user'), '[Audio] Dang phat audio TTS...')
 
 
 

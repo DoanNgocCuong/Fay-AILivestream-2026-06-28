@@ -121,7 +121,7 @@ class QAService:
                 with open(log_file, 'w', newline='', encoding='utf-8') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows(filtered_rows)
-                util.log(1, f'从QA文件中删除了 {removed_count} 条记录')
+                util.log(1, f'[QA] Da xoa {removed_count} ban ghi khoi file QA')
                 return True
             else:
                 util.log(1, '未找到匹配的QA记录')

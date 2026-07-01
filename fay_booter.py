@@ -359,6 +359,13 @@ def stop():
     except:
         pass
 
+    # Dung Live Comment Service
+    try:
+        from core.live_comment_service import LiveCommentService
+        LiveCommentService.get_instance().stop()
+    except Exception:
+        pass
+
     util.log(1, '正在关闭核心服务...')
     feiFei.stop()
     util.log(1, '服务已关闭！')
@@ -406,6 +413,14 @@ def start():
         avatar_pipeline.start()
     except Exception as e:
         util.log(2, f'[Avatar] Bỏ qua avatar pipeline: {e}')
+
+    # Khởi động Live Comment Service (Facebook + TikTok)
+    try:
+        from core.live_comment_service import start_live_comment_service
+        start_live_comment_service()
+        util.log(1, '[LiveComment] Service khoi dong (kiem tra LIVE_COMMENT_ENABLED trong .env)')
+    except Exception as e:
+        util.log(2, f'[LiveComment] Bo qua live comment service: {e}')
 
     #开启核心服务
     util.log(1, '开启核心服务...')

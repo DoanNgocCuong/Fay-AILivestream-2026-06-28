@@ -33,3 +33,11 @@ python-docx
 python-pptx
 chromadb
 sentence_transformers
+
+# Phase 2 - OBS Livestream
+pyvirtualcam          # Python -> OBS Virtual Camera (can OBS + Virtual Camera driver)
+undetected-chromedriver  # Facebook Live comment scraper
+selenium              # browser automation cho facebook_reader
+TikTokLive            # TikTok Live comment reader (event-based)
+pycaw                 # Windows audio device control (route sang VB-Cable)
+comtypes              # Windows COM interface (phan phu thuoc cua pycaw)

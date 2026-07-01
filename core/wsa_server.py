@@ -118,7 +118,7 @@ class MyServer:
                 
     async def __handler(self, websocket, path):
         self.isConnect = True
-        util.log(1,"websocket连接上:{}".format(self.__port))
+        util.log(1,"[WebSocket] Ket noi thanh cong port:{}".format(self.__port))
         self.on_connect_handler()
         remote_address = websocket.remote_address
         unique_id = f"{remote_address[0]}:{remote_address[1]}"

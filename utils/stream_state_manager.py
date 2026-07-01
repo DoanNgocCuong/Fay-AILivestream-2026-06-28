@@ -276,7 +276,7 @@ def start_cleanup_thread():
 
     cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
     cleanup_thread.start()
-    util.log(1, "流式状态管理器清理线程已启动")
+    util.log(1, "[Stream] Cleanup thread da khoi dong")
 
 
 # 自动启动清理线程

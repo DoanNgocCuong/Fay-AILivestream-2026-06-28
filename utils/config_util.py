@@ -89,6 +89,11 @@ volcano_tts_appid = None
 volcano_tts_access_token = None
 volcano_tts_cluster = None
 volcano_tts_voice_type = None
+elevenlabs_api_key = None
+elevenlabs_voice_id = None
+elevenlabs_model = None
+syncso_api_key = None
+syncso_avatar_video = None
 start_mode = None
 fay_url = None
 system_conf_path = None
@@ -327,6 +332,11 @@ def load_config(force_reload=False):
     global volcano_tts_access_token
     global volcano_tts_cluster
     global volcano_tts_voice_type
+    global elevenlabs_api_key
+    global elevenlabs_voice_id
+    global elevenlabs_model
+    global syncso_api_key
+    global syncso_avatar_video
     global start_mode
     global fay_url
     global use_bionic_memory
@@ -560,6 +570,11 @@ def load_config(force_reload=False):
     volcano_tts_access_token = system_config.get('key', 'volcano_tts_access_token', fallback=None)
     volcano_tts_cluster = system_config.get('key', 'volcano_tts_cluster', fallback=None)
     volcano_tts_voice_type = system_config.get('key', 'volcano_tts_voice_type', fallback=None)
+    elevenlabs_api_key = system_config.get('key', 'elevenlabs_api_key', fallback=None)
+    elevenlabs_voice_id = system_config.get('key', 'elevenlabs_voice_id', fallback=None)
+    elevenlabs_model = system_config.get('key', 'elevenlabs_model', fallback='eleven_multilingual_v2')
+    syncso_api_key = system_config.get('key', 'syncso_api_key', fallback=None)
+    syncso_avatar_video = system_config.get('key', 'syncso_avatar_video', fallback='./avatar/assets/avatar_idle.mp4')
 
     # 读取 Embedding API 配置
     embedding_api_model = system_config.get('key', 'embedding_api_model', fallback='').strip()
@@ -625,6 +640,11 @@ def load_config(force_reload=False):
         'volcano_tts_access_token': volcano_tts_access_token,
         'volcano_tts_cluster': volcano_tts_cluster,
         'volcano_tts_voice_type': volcano_tts_voice_type,
+        'elevenlabs_api_key': elevenlabs_api_key,
+        'elevenlabs_voice_id': elevenlabs_voice_id,
+        'elevenlabs_model': elevenlabs_model,
+        'syncso_api_key': syncso_api_key,
+        'syncso_avatar_video': syncso_avatar_video,
 
         'start_mode': start_mode,
         'fay_url': fay_url,

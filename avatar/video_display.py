@@ -3,6 +3,7 @@ Video display with 2 modes:
 - IDLE: loop background video continuously (with audio)
 - SPEAKING: play lip-synced video with audio, then return to IDLE
 """
+import queue
 import subprocess
 import threading
 import time
@@ -10,6 +11,7 @@ import os
 import cv2
 import numpy as np
 from avatar import config
+from avatar import stillness
 
 try:
     import pygame
@@ -17,6 +19,12 @@ try:
     _pygame_available = True
 except Exception:
     _pygame_available = False
+
+try:
+    import pyvirtualcam
+    _pyvirtualcam_available = True
+except ImportError:
+    _pyvirtualcam_available = False
 
 
 def _get_ffmpeg_exe() -> str:
@@ -93,6 +101,9 @@ _MODE_IDLE = "idle"
 _MODE_SPEAKING = "speaking"
 
 
+_GOLDEN_WAIT_TIMEOUT = 3.0   # giây tối đa chờ golden frame trước khi switch ngay
+
+
 class VideoDisplay:
     def __init__(self):
         self._mode = _MODE_IDLE
@@ -100,6 +111,9 @@ class VideoDisplay:
         self._running = False
         self._thread = None
         self._speak_video_path = None
+        self._lipsync_queue: queue.Queue = queue.Queue()  # videos waiting to be played
+        self._pending_lipsync_path: str | None = None   # dequeued, waiting for golden frame
+        self._pending_lipsync_since: float = 0.0
         self._idle_cap = None
         self._idle_audio_wav: str | None = None
         self._idle_audio_playing = False
@@ -107,9 +121,23 @@ class VideoDisplay:
         self._display_w = config.WIDTH or 720
         self._display_h = config.HEIGHT or 1280
         self._idle_audio_start: float = 0.0
+        self._idle_total_frames: int = 0
+        self._vcam = None  # pyvirtualcam.Camera instance (khi OBS_VIRTUAL_CAM=True)
 
     def start(self):
         self._running = True
+        if config.OBS_VIRTUAL_CAM and _pyvirtualcam_available:
+            try:
+                self._vcam = pyvirtualcam.Camera(
+                    width=config.OBS_CAM_WIDTH,
+                    height=config.OBS_CAM_HEIGHT,
+                    fps=config.OBS_CAM_FPS,
+                    fmt=pyvirtualcam.PixelFormat.BGR,
+                )
+                print(f"[OBS VirtualCam] started: {config.OBS_CAM_WIDTH}x{config.OBS_CAM_HEIGHT} @{config.OBS_CAM_FPS}fps")
+            except Exception as e:
+                print(f"[OBS VirtualCam] failed to start: {e}")
+                self._vcam = None
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -118,12 +146,21 @@ class VideoDisplay:
         _stop_audio()
         if self._thread:
             self._thread.join(timeout=3)
+        if self._vcam:
+            try:
+                self._vcam.close()
+            except Exception:
+                pass
+            self._vcam = None
         cv2.destroyAllWindows()
 
-    def play_lipsync(self, video_path: str):
-        with self._lock:
-            self._speak_video_path = video_path
-            self._mode = _MODE_SPEAKING
+    def play_lipsync(self, video_path: str, follow_up_path: str | None = None):
+        """Enqueue a lipsync video to play. Videos play in submission order.
+        follow_up_path: neu co, phat ngay sau video chinh (closing phrase).
+        """
+        self._lipsync_queue.put(video_path)
+        if follow_up_path and os.path.exists(follow_up_path):
+            self._lipsync_queue.put(follow_up_path)
 
     def _run(self):
         self._idle_cap = self._open_idle_source()
@@ -143,11 +180,41 @@ class VideoDisplay:
         # Pre-extract idle audio once
         if self._idle_cap and os.path.exists(config.AVATAR_VIDEO_PATH):
             self._idle_audio_wav = _extract_audio_wav(config.AVATAR_VIDEO_PATH)
+            self._idle_total_frames = int(self._idle_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # Kick off golden-frame pre-computation in background
+            stillness.precompute_async(config.AVATAR_VIDEO_PATH)
 
         while self._running:
             with self._lock:
                 mode = self._mode
                 speak_path = self._speak_video_path
+                pending_path = self._pending_lipsync_path
+                pending_since = self._pending_lipsync_since
+
+            # Dequeue next video when idle and no pending item
+            if mode == _MODE_IDLE and not pending_path:
+                try:
+                    next_path = self._lipsync_queue.get_nowait()
+                    with self._lock:
+                        self._pending_lipsync_path = next_path
+                        self._pending_lipsync_since = time.perf_counter()
+                    pending_path = next_path
+                    pending_since = self._pending_lipsync_since
+                except queue.Empty:
+                    pass
+
+            # Promote pending to SPEAKING when idle loop reaches a golden frame
+            # (or when the timeout expires to avoid waiting forever)
+            if pending_path and mode == _MODE_IDLE:
+                timed_out = (time.perf_counter() - pending_since) > _GOLDEN_WAIT_TIMEOUT
+                at_golden = self._at_golden_frame()
+                if at_golden or timed_out:
+                    with self._lock:
+                        self._speak_video_path = self._pending_lipsync_path
+                        self._pending_lipsync_path = None
+                        self._mode = _MODE_SPEAKING
+                    speak_path = self._speak_video_path
+                    mode = _MODE_SPEAKING
 
             if mode == _MODE_SPEAKING and speak_path and os.path.exists(speak_path):
                 self._idle_audio_playing = False
@@ -157,7 +224,6 @@ class VideoDisplay:
                     self._mode = _MODE_IDLE
                     self._speak_video_path = None
                 # Reset idle video to frame 0 so audio-clock sync doesn't stall
-                # (idle_cap was at an arbitrary frame when SPEAKING started)
                 if self._idle_cap:
                     self._idle_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             else:
@@ -172,6 +238,18 @@ class VideoDisplay:
         if self._idle_cap:
             self._idle_cap.release()
         cv2.destroyAllWindows()
+
+    def _at_golden_frame(self) -> bool:
+        """True nếu idle video hiện đang ở gần một golden frame (±1 frame)."""
+        if not self._idle_cap:
+            return True  # no video → switch immediately
+        current = int(self._idle_cap.get(cv2.CAP_PROP_POS_FRAMES))
+        target = stillness.next_golden_frame(
+            config.AVATAR_VIDEO_PATH, current, self._idle_total_frames
+        )
+        if target is None:
+            return True  # precompute not done yet → switch immediately
+        return abs(current - target) <= 1
 
     def _open_idle_source(self):
         if os.path.exists(config.AVATAR_VIDEO_PATH):
@@ -220,6 +298,7 @@ class VideoDisplay:
         if ret:
             frame = self._resize(frame)
             cv2.imshow(config.WINDOW_NAME, frame)
+            self._send_to_vcam(frame)
         time.sleep(1.0 / self._idle_fps / 2)  # short sleep to not spin-lock CPU
 
     def _show_fallback(self):
@@ -227,13 +306,16 @@ class VideoDisplay:
         if os.path.exists(config.AVATAR_IMAGE_PATH):
             frame = cv2.imread(config.AVATAR_IMAGE_PATH)
             if frame is not None:
-                cv2.imshow(config.WINDOW_NAME, self._resize(frame))
+                display_frame = self._resize(frame)
+                cv2.imshow(config.WINDOW_NAME, display_frame)
+                self._send_to_vcam(display_frame)
                 _precise_sleep(frame_start, 1.0 / self._idle_fps)
                 return
         blank = np.zeros((self._display_h, self._display_w, 3), dtype=np.uint8)
         cv2.putText(blank, "Linh - Dr.Bee AI Host", (50, self._display_h // 2),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2)
         cv2.imshow(config.WINDOW_NAME, blank)
+        self._send_to_vcam(blank)
         _precise_sleep(frame_start, 1.0 / self._idle_fps)
 
     def _play_once(self, video_path: str):
@@ -268,6 +350,7 @@ class VideoDisplay:
                 break  # video finished (time-based path, or audio-sync fallback)
             frame = self._resize(frame)
             cv2.imshow(config.WINDOW_NAME, frame)
+            self._send_to_vcam(frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self._running = False
                 break
@@ -278,6 +361,17 @@ class VideoDisplay:
 
         cap.release()
         _stop_audio()
+
+    def _send_to_vcam(self, frame: np.ndarray):
+        """Push một frame BGR lên OBS Virtual Camera nếu đã khởi động."""
+        if not self._vcam:
+            return
+        try:
+            resized = cv2.resize(frame, (config.OBS_CAM_WIDTH, config.OBS_CAM_HEIGHT))
+            self._vcam.send(resized)
+            self._vcam.sleep_until_next_frame()
+        except Exception:
+            pass
 
     def _resize(self, frame: np.ndarray) -> np.ndarray:
         h, w = frame.shape[:2]

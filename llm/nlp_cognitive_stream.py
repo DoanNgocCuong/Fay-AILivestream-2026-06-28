@@ -174,15 +174,15 @@ class AgentState(TypedDict, total=False):
 
 
 def _find_last_safe_punct(text: str, punctuation_list) -> int:
-    """在文本中查找最后一个安全的标点切分位置，跳过数字中的小数点（如0.85）"""
+    """在文本中查找最后一个安全的标点切分位置，跳过数字小数点和缩写（如Dr.Bee）"""
     last_punct_pos = -1
     for punct in punctuation_list:
         pos = text.rfind(punct)
-        # 对英文句点，跳过数字间的小数点
-        while pos > 0 and punct == ".":
+        # 对英文句点，跳过不安全的点：数字小数点（1.5）或缩写/品牌名（Dr.Bee，next_ch 是字母）
+        while pos >= 0 and punct == ".":
             prev_ch = text[pos - 1] if pos > 0 else ""
             next_ch = text[pos + 1] if pos + 1 < len(text) else ""
-            if prev_ch.isdigit() and next_ch.isdigit():
+            if (prev_ch.isdigit() and next_ch.isdigit()) or next_ch.isalpha():
                 pos = text.rfind(punct, 0, pos)
             else:
                 break
@@ -836,11 +836,13 @@ def _build_planner_messages(state: AgentState) -> List[SystemMessage | HumanMess
         '\n1. 是闲聊: {"action": "finish", "message": "你的回复内容"}'
         '\n2. 不是闲聊: {"action": "tool", "keyword": "提取的搜索关键词"}'
         '\n\n什么是闲聊（输出 finish）：'
-        '\n- 打招呼：你好、hi、早上好'
-        '\n- 情绪表达：我好开心、今天好累'
-        '\n- 感谢道别：谢谢、再见、拜拜'
-        '\n- 简单确认：好的、收到、明白了'
-        '\n- 对你上一句话的回应：哈哈、对的、没错、说得好'
+        '\n- 打招呼：你好、hi、hello、早上好、xin chào、chào、hey、hola、hello em、hi em、hey em、alo、ơi、chào em'
+        '\n- 越南语问候/闲聊：xin chào、chào bạn、chào anh、chào chị、hello、hi bạn、ơi、cho hỏi chút、mình muốn hỏi'
+        '\n- 情绪表达：我好开心、今天好累、vui quá、mệt quá'
+        '\n- 感谢道别：谢谢、再见、拜拜、cảm ơn、bye、tạm biệt'
+        '\n- 简单确认：好的、收到、明白了、ok、được、oke、hiểu rồi'
+        '\n- 对你上一句话的回应：哈哈、对的、没错、说得好、haha、ừ、đúng rồi'
+        '\n- 单个词/极短句且不含产品名：like、wow、ờ、uhm'
         '\n\n什么不是闲聊（输出 tool）：'
         '\n- 问任何具体事物/概念：XX是什么、你知道XX吗'
         '\n- 要求查询/获取/阅读内容'
@@ -2392,7 +2394,7 @@ def question(content, username, observation=None):
         prestart_stream_text = f"<prestart>{prestart_context}</prestart>"
     
     # 获取当前时间
-    current_time = datetime.datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Vietnamese Livestream Sales mode: activate when job contains "host" or "livestream"
     _job = agent_desc.get('occupation', '')
@@ -2409,22 +2411,36 @@ Bạn là {agent_desc['first_name']} — {agent_desc['position']}, {agent_desc['
 **NHIỆM VỤ CHÍNH**
 Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ người dùng là một bình luận từ viewer trên buổi live.
 
-**QUY TẮC PHẢN HỒI**
-1. Luôn trả lời bằng tiếng Việt tự nhiên, vui vẻ, nhiệt tình như host bán hàng thật.
-2. Trả lời ngắn gọn (1-3 câu), đủ thuyết phục — không dài dòng.
-3. Khi viewer hỏi về sản phẩm: nêu tên sản phẩm, lợi ích chính, giá, kêu gọi chốt đơn.
-4. Khi viewer hỏi giá: báo giá rõ ràng và thêm ưu đãi nếu có.
-5. Khi viewer tỏ ra quan tâm: tạo urgency nhẹ ("còn ít hàng", "ưu đãi hôm nay thôi").
-6. Khi viewer khen: cảm ơn và giới thiệu thêm sản phẩm liên quan.
-7. Khi viewer chê hoặc phàn nàn: xử lý khéo léo, không defensive.
-8. Gọi viewer bằng "bạn" hoặc "anh/chị" tùy ngữ cảnh.
-9. Kết thúc câu trả lời thường bằng call-to-action: "đặt hàng ngay nha!", "comment SĐT để mình ship nhé!", v.v.
-10. KHÔNG bịa thông tin sản phẩm không có trong danh sách — nói "để Linh kiểm tra lại cho mình nhé".
+**QUY TẮC BẤT BIẾN**
+1. LUÔN trả lời bằng tiếng Việt. TUYỆT ĐỐI không dùng tiếng Trung hay tiếng Anh dù tool trả về ngôn ngữ đó.
+2. Nói như đang trực tiếp trên sóng — tự nhiên, có cảm xúc, KHÔNG viết như chatbot hay CSKH.
+3. KHÔNG dùng gạch đầu dòng, KHÔNG liệt kê kiểu báo cáo.
+4. KHÔNG bịa thông tin — nếu không chắc thì "để Linh check lại ngay cho anh/chị nha".
+
+**PHÂN LOẠI COMMENT → CÁCH REPLY**
+
+[LOẠI 1] Chào hỏi / vào live (hello, xin chào, hi em, ơi...)
+→ Chào NGẮN (1 câu) + pivot ngay vào hook sản phẩm (1 câu) + CTA (1 câu)
+→ Ví dụ: "Chào anh/chị ghé live của Linh nè! Hôm nay Linh đang có deal COMBO trị gàu nấm Dr.Bee cực hot, anh/chị đang bị gàu hay rụng tóc không để Linh tư vấn ngay?"
+
+[LOẠI 2] Hỏi giá / hỏi sản phẩm
+→ Tên sản phẩm + 1 lợi ích chủ chốt + giá + urgency + CTA comment SĐT
+→ Ví dụ: "Combo Detoxx 60 ngày chỉ 599k thôi anh/chị ơi, hết gàu ngứa trong 30 ngày cam kết hoàn tiền 100%! Comment SĐT để Linh ship ngay nha, còn mấy suất thôi!"
+
+[LOẠI 3] Quan tâm / tỏ ra thích
+→ Gọi tên + xác nhận cảm xúc + tạo khan hiếm + thúc SĐT
+→ Ví dụ: "Ủa chị quan tâm đúng rồi đó! Deal này hôm nay thôi nha chị, Linh đang còn đúng 5 suất, chị comment SĐT ngay để Linh giữ suất cho chị!"
+
+[LOẠI 4] Phàn nàn / nghi ngờ giá cao
+→ Không tranh cãi + chia sẻ bằng chứng xã hội + cam kết + CTA thử
+→ Ví dụ: "Dạ Linh hiểu chị lo! Nhưng Dr.Bee cam kết hoàn 100% sau 15 ngày nếu không hiệu quả — chị không mất gì hết. Đã có hơn 30.000 người dùng thành công rồi chị ơi, thử đi!"
+
+[LOẠI 5] Hỏi linh tinh / off-topic
+→ Trả lời vui vẻ ngắn gọn + kéo về sản phẩm
+→ Ví dụ: "Haha anh/chị hỏi vui ghê! Thôi Linh kéo anh/chị về chủ đề chính nha — hôm nay có deal siêu hot không bỏ lỡ được đâu!"
 
 **PHONG CÁCH**
-- Nhiệt tình, thân thiện, tự tin
-- Dùng ngôn ngữ đời thường, gần gũi
-- Tạo cảm giác khan hiếm và ưu đãi đặc biệt một cách tự nhiên
+Nhiệt tình như bạn thân đang live — không phải nhân viên bán hàng đọc kịch bản. Lồng tên viewer vào câu tự nhiên khi biết tên.
 
 **THỜI GIAN HIỆN TẠI**: {current_time}
 """
@@ -2499,17 +2515,6 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
             system_prompt += f"**外部知识上下文**\n以下是通过 MCP 服务获取的参考信息，可帮助你了解自己掌握的知识范围并据此回答用户问题：\n{resource_text}\n\n"
     except Exception as exc:
         util.log(1, f"注入 MCP Resources 失败: {exc}")
-
-    # Inject product knowledge base directly into system prompt
-    try:
-        _kb_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "data_san_pham.md")
-        if os.path.exists(_kb_path):
-            with open(_kb_path, "r", encoding="utf-8") as _f:
-                _kb_content = _f.read().strip()
-            if _kb_content:
-                system_prompt += f"\n\n**KIẾN THỨC SẢN PHẨM DR.BEE**\nDùng thông tin dưới đây để tư vấn chính xác cho khách. KHÔNG bịa thêm thông tin ngoài phạm vi này.\n\n{_kb_content}\n"
-    except Exception as exc:
-        util.log(1, f"Không load được knowledge base sản phẩm: {exc}")
 
     # 根据配置决定是否按用户隔离历史消息
     try:
@@ -2960,14 +2965,15 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
 
         tool_result_section = f"""
 ---
-**后台工具执行结果**
-以下工具已在后台执行完成，请基于结果回答用户的问题「{finished_state.original_request}」:
+**KẾT QUẢ CÔNG CỤ NỀN**
+Các công cụ đã chạy xong. Dựa vào kết quả bên dưới để trả lời câu hỏi của viewer: «{finished_state.original_request}»
+Nhớ: trả lời bằng tiếng Việt tự nhiên như host livestream, không dùng ngôn ngữ khác.
 {tool_context}
 """
         if error_info:
-            tool_result_section += f"\n执行过程中的错误: {error_info}\n"
+            tool_result_section += f"\nLỗi trong quá trình thực thi: {error_info}\n"
         if hint:
-            tool_result_section += f"\n大模型建议回复方向: {hint}\n"
+            tool_result_section += f"\nGợi ý hướng trả lời: {hint}\n"
 
         enhanced_system = system_prompt + tool_result_section
         summary_state: AgentState = {
@@ -3108,7 +3114,8 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
             on_tool_detected=_on_tool_detected,
         )
     except Exception as llm_err:
-        util.log(1, f"[大小模型] {username}: 规划器LLM调用失败: {llm_err}")
+        import traceback
+        util.log(2, f"[LLM-ERROR] {username}: LLM call that bai!\n  Type: {type(llm_err).__name__}\n  Message: {llm_err}\n{traceback.format_exc()}")
         error_reply = "Xin lỗi, mình gặp chút sự cố, bạn thử lại sau nhé."
         write_sentence(error_reply, force_first=is_first_sentence)
         if not sm.should_stop_generation(username, conversation_id=conversation_id):
@@ -3186,11 +3193,21 @@ Bạn đang dẫn chương trình livestream bán hàng. Mỗi tin nhắn từ n
         # 真正的闲聊（问候、确认、简短回答）一般不超过 80 字
         # 超过说明弱模型在 finish 里编造事实性内容，追加工具核实
         # 条件：有任何可用工具 + finish 内容超过 80 字 + 用户消息非纯语气词（>3字）
+        # Ngoại lệ: greeting thuần túy không cần verify dù reply dài
+        _GREETING_PATTERNS = [
+            'xin chào', 'chào', 'hello', 'hi ', 'hey ', 'hola', 'ơi', 'alo',
+            'chào bạn', 'chào anh', 'chào chị', 'hello em', 'hi em', 'hey em',
+            'good morning', 'good afternoon', 'good evening',
+            'cho hỏi', 'mình muốn hỏi',
+        ]
+        _is_greeting = any(content.strip().lower().startswith(g) or content.strip().lower() == g.strip()
+                           for g in _GREETING_PATTERNS) or len(content.strip()) <= 10
         has_tools = bool(tool_registry)
         user_msg_stripped = content.strip()
         need_verify = (has_tools
                        and len(finish_msg) > 80
-                       and len(user_msg_stripped) > 3)
+                       and len(user_msg_stripped) > 3
+                       and not _is_greeting)
         if need_verify:
             util.log(1, f"[大小模型] {username}: 闲聊判断器 finish 过长({len(finish_msg)}字)，追加核实")
             if accumulated_text:
